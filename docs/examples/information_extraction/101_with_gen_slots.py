@@ -3,7 +3,7 @@
 from mellea import generative, start_session
 from mellea.backends import model_ids
 
-m = start_session(model_id=model_ids.MISTRALAI_MISTRAL_0_3_7b)
+m = start_session(model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B)
 
 
 @generative

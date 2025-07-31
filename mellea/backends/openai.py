@@ -134,6 +134,9 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
             case str():
                 self._hf_model_id = model_id
             case ModelIdentifier():
+                assert model_id.hf_model_name is not None, (
+                    "model_id is None. This can also happen if the ModelIdentifier has no hf_model_id name set."
+                )
                 self._hf_model_id = model_id.hf_model_name
 
         if base_url is None:

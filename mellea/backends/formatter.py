@@ -401,7 +401,7 @@ class TemplateFormatter(Formatter, abc.ABC):
         model_id = ""
         for val in ids:
             if val != "None" and val != "":
-                model_id = val
+                model_id = val  # type: ignore
                 break
         return model_id
 

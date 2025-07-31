@@ -103,7 +103,7 @@ class OllamaModelBackend(FormatterBackend):
             else self.model_id
         )
         assert ollama_model_id is not None, (
-            "model_id is None. This can also happen if the ModelIdentifier has no ollama name set."
+            "model_id is None. This can also happen if the ModelIdentifier has no ollama name set or this model is not available in ollama."
         )
         return ollama_model_id
 

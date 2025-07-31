@@ -1,4 +1,3 @@
-# You cannot run this file on its own. Use the `m serve` command.
 from mcp.server.fastmcp import FastMCP
 
 from mellea import MelleaSession

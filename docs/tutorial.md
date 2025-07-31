@@ -11,18 +11,18 @@
 - [Chapter 3: Overview of the Standard Library](#chapter-3-overview-of-the-standard-library)
 - [Chapter 4: Generative Slots](#chapter-4-generative-slots)
 - [Chapter 5: MObjects](#chapter-5-mobjects)
-    - [Case Study: Working with Documents](#case-study-working-with-documents)
+  - [Case Study: Working with Documents](#case-study-working-with-documents)
 - [Chapter 6: Tuning for Requirements and Components](#chapter-6-tuning-requirements-and-components)
 - [Chapter 7: Context Management](#chapter-7-on-context-management)
 - [Chapter 8: Implementing Agents](#chapter-8-implementing-agents)
-    - [Case Study: ReACT](#case-study-implementing-react-in-mellea)
-    - [The Guarded Nondeterminism Pattern](#guarded-nondeterminism)
+  - [Case Study: ReACT](#case-study-implementing-react-in-mellea)
+  - [The Guarded Nondeterminism Pattern](#guarded-nondeterminism)
 - [Chapter 9: Interoperability with Other Frameworks](#chapter-9-interoperability-with-other-frameworks)
 - [Chapter 10: Prompt Engineering for Mellea](#chapter-10-prompt-engineering-for-m)
   - [Custom  Templates](#custom--templates)
 - [Appendix: Contributing to M](#appendix-contributing-to-m)
 
-# Chapter 1: What Is Generative Programming
+## Chapter 1: What Is Generative Programming
 
 This tutorial is about Mellea. Mellea helps you write better generative programs. 
 
@@ -350,6 +350,7 @@ The following Cheat Sheet concisely visualizes the relationship between Componen
 TODO INSERT HENDRIK'S CHEAT SHEET
 
 M's standard library contains four basic types of Components:
+
 1. [Instructions](#chapter-2-getting-started-with-generative-programming-in-mellea), which we have already seen.
 2. [Requirements](#chapter-2-getting-started-with-generative-programming-in-mellea), which we have already seen and will continue to use heavily throughout the remainder of the tutorial.
 3. [Generative Slots](#chapter-4-generative-slots), which treat LLM calls as functions.
@@ -359,7 +360,7 @@ This is not an exhaustive list of possible component types. New components can b
 
 But before getting into these advanced modalities, let's finish our overview of the standard library of Components that ship with Mellea.
 
-# Chapter 4: Generative Slots
+## Chapter 4: Generative Slots
 
 In classical programming, pure (stateless) functions are a simple and powerful abstraction. A pure function takes inputs, computes outputs, and has no side effects. Generative programs can also use functions as abstraction boundaries, but in a generative program the meaning of the function can be given by an LLM instead of an interpreter or compiler. This is the idea behind a **GenerativeSlot**.
 
@@ -1071,12 +1072,64 @@ We will dive into a full implementation of these and other Kripke agent tricks d
 
 ## Chapter 9: Interoperability with Other Frameworks
 
-Mellea programs are, at last, just Python programs. Mellea programs can be shared via the Model Context Protocol or via the A2A protocol. Mellea programs can also consume tools and agents that implement these protocols. See the `docs/` directory for some simple examples.
+Mellea programs are, at last, just Python programs. Mellea programs can be shared via the Model Context Protocol or via the A2A protocol. Mellea programs can also consume tools and agents that implement these protocols.
+
+### Simple mcp server running Mellea
+
+Like we mentioned, mellea are at the end python programs. We can wrap a simple `mcp` server around a program and use the server as-is. Here is an example using [Pydantic AI's inbuild mcp server](https://ai.pydantic.dev/mcp/server/).
+
+```python
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/agents/mcp_example.py#L15-L40
+# Create an MCP server
+mcp = FastMCP("Demo")
+
+
+@mcp.tool()
+def write_a_poem(word_limit: int) -> str:
+    """Write a poem with a word limit."""
+    m = MelleaSession(OllamaModelBackend(model_ids.QWEN3_8B))
+    wl_req = Requirement(
+        f"Use only {word_limit} words.",
+        validation_fn=simple_validate(lambda x: len(x.split(" ")) < word_limit),
+    )
+
+    res = m.instruct(
+        "Write a poem",
+        requirements=[wl_req],
+        strategy=RejectionSamplingStrategy(loop_budget=4),
+    )
+    assert isinstance(res, ModelOutputThunk)
+    return str(res.value)
+
+if __name__ == '__main__':
+    mcp.run()
+```
+
+### Running Mellea programs as an openai compatible server (Experimental)
 
 We also provide an expiermental `m serve` utility for serving up an OpenAI-compatible **chat** endpoint. This allows you to write `m` programs that masquerade as a "model". To learn more about this functionality, run:
 
 ```shell
 m serve --help
+```
+
+#### Example `m serve` application
+
+While deploying programs using `m serve`, it is important for the programs to follow a specific structure. The programs needs a have function called `serve` with the following signature: 
+
+```python
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/agents/m_serve_example.py#L25-L29
+def serve(
+    input: list[ChatMessage],
+    model_options: None | dict = None,
+    **kwargs
+)
+```
+
+the `m serve` command then subsequently takes this funcition and runs a server that is openai compatible. For more information, please have a look at [this file](./examples/tutorial/m_serve_example.py) for how to write an `m serve` compatible program. To run the example: 
+
+```shell
+m serve docs/examples/tutorial/m_serve_example.py
 ```
 
 ## Chapter 10: Prompt Engineering for M

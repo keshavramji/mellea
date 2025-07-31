@@ -116,7 +116,7 @@ class WatsonxAIBackend(FormatterBackend):
             else self.model_id
         )
         assert watsonx_model_id is not None, (
-            "model_id is None. This can also happen if the ModelIdentifier has no watsonx name set."
+            "model_id is None. This can also happen if the ModelIdentifier has no watsonx name set or this model is not available in watsonx."
         )
         return watsonx_model_id
 
