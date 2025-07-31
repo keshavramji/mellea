@@ -1,0 +1,7 @@
+from textwrap import fill
+from typing import Any
+
+
+# Just for printing stuff nicely...
+def w(x: Any) -> str:
+    return fill(str(x), width=120, replace_whitespace=False)
