@@ -3,7 +3,7 @@
 # Mellea
 
 Mellea is a library for writing generative programs.
-Generative programming replaces flaky agents and bittle prompts
+Generative programming replaces flaky agents and brittle prompts
 with structured, maintainable, robust, and efficient AI workflows.
 
 
@@ -68,7 +68,7 @@ git clone ssh://git@github.com/<my-username>/mellea.git && cd mellea/
 Setup a virtual environment:
 
 ```bash
-uv venv .venv && source .venv/binactivate
+uv venv .venv && source .venv/bin/activate
 ```
 
 Use `uv pip` to install from source with the editable flag:
