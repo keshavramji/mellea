@@ -20,7 +20,7 @@
 - [Chapter 9: Interoperability with Other Frameworks](#chapter-9-interoperability-with-other-frameworks)
 - [Chapter 10: Prompt Engineering for Mellea](#chapter-10-prompt-engineering-for-m)
   - [Custom  Templates](#custom--templates)
-- [Appendix: Contributing to M](#appendix-contributing-to-m)
+- [Appendix: Contributing to Melles](#appendix-contributing-to-mellea)
 
 ## Chapter 1: What Is Generative Programming
 

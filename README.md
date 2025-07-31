@@ -41,6 +41,12 @@ with structured, maintainable, robust, and efficient AI workflows.
 ## Getting Started
 <img src="docs/GetStarted_py.png" style="max-width:800px">
 
+Install with pip:
+
+```bash
+uv pip install .
+```
+
 For running a simple LLM request locally (using Ollama with Granite model), this is the satrting code:
 ```python
 # filename: example.py
@@ -54,7 +60,7 @@ print(m.chat("What is the etymology of mellea?").content)
 Then run it:
 
 ```shell
-uv run --with mellea example.py
+uv run mellea example.py
 ```
 
 ### Installing from source
