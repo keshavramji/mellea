@@ -34,7 +34,7 @@ with structured, maintainable, robust, and efficient AI workflows.
  * Easily integrate the power of LLMs into legacy code-bases (mify).
  * Sketch applications by writing specifications and letting `mellea` fill in
    the details (generative slots).
- * Get started by decomposing your large unwieldy prompts into structured and maintainable mellea problems. 
+ * Get started by decomposing your large unwieldy prompts into structured and maintainable mellea problems.
 
 
 
@@ -93,8 +93,8 @@ pre-commit install
 
 Mellea supports validation of generation results through a **instruct-validate-repair** pattern.
 Below, the request for *"Write an email.."* is constrained by the requirements of *"be formal"* and *"Use 'Dear interns' as greeting."*.
-Using a simple rejection sampling strategy, the request is send up to three (loop_budget) times to the model and 
-the output is checked against the constraints using (in this case) LLM-as-a-judge.   
+Using a simple rejection sampling strategy, the request is send up to three (loop_budget) times to the model and
+the output is checked against the constraints using (in this case) LLM-as-a-judge.
 
 
 ```python
@@ -127,8 +127,8 @@ print(f"***** email ****\n{str(email_v1)}\n*******")
 
 ## Getting Started with Generative Slots
 
-Generative slots allow to define functions without implementing them. 
-By using the `@generative` decorator, the function gets converted into an LLM function. 
+Generative slots allow to define functions without implementing them.
+By using the `@generative` decorator, the function gets converted into an LLM function.
 The example below, is a minimal version of writing a sentiment classification function
 using Mellea's generative slots and a local LLM
 
@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
 ## Tutorial
 
-See the [tutorial](docs/tutorial-wip.md)
+See the [tutorial](docs/tutorial.md)
 
 ## Contributing
 
