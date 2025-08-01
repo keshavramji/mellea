@@ -47,7 +47,7 @@ Install with pip:
 uv pip install .
 ```
 
-For running a simple LLM request locally (using Ollama with Granite model), this is the satrting code:
+For running a simple LLM request locally (using Ollama with Granite model), this is the starting code:
 ```python
 # filename: example.py
 import mellea
@@ -130,7 +130,7 @@ print(f"***** email ****\n{str(email_v1)}\n*******")
 Generative slots allow to define functions without implementing them.
 By using the `@generative` decorator, the function gets converted into an LLM function.
 The example below, is a minimal version of writing a sentiment classification function
-using Mellea's generative slots and a local LLM
+using Mellea's generative slots and a local LLM.
 
 
 
@@ -158,7 +158,7 @@ See the [tutorial](docs/tutorial.md)
 
 ## Contributing
 
-Please refer to the [Contributor Guide](docs/tutorial-wip.md) for detailed instructions on how to contribute.
+Please refer to the [Contributor Guide](docs/tutorial.md#appendix-contributing-to-mellea) for detailed instructions on how to contribute.
 
 ### IBM ❤️ Open Source AI
 
