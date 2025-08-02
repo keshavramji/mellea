@@ -49,7 +49,7 @@ uv pip install .
 
 For running a simple LLM request locally (using Ollama with Granite model), this is the starting code:
 ```python
-# filename: example.py
+# filename: docs/examples/tutorial/example.py
 import mellea
 
 m = mellea.start_session()
@@ -60,7 +60,7 @@ print(m.chat("What is the etymology of mellea?").content)
 Then run it:
 
 ```shell
-uv run mellea example.py
+uv run --with mellea docs/examples/tutorial/example.py
 ```
 
 ### Installing from source
