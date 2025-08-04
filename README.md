@@ -47,6 +47,8 @@ Install with pip:
 uv pip install .
 ```
 
+> NOTE: If running on an Intel mac, you may get errors related to torch/torchvision versions. Conda maintains updated versions of these packages. You will need to create a conda environment and run `conda install 'torchvision>=0.22.0'` (this should also install pytorch and torchvision-extra). Then, you should be able to run `uv pip install .`. To run the examples, you will need to use `python <filename>` inside the conda environment instead of `uv run --with mellea <filename>`.
+
 For running a simple LLM request locally (using Ollama with Granite model), this is the starting code:
 ```python
 # filename: docs/examples/tutorial/example.py
@@ -58,7 +60,7 @@ print(m.chat("What is the etymology of mellea?").content)
 
 
 Then run it:
-
+> NOTE: Before we get started, you will need to download and install [ollama](https://ollama.com/). Mellea can work with many different types of backends, but everything in this tutorial will "just work" on a Macbook running IBM's Granite 3.3 8B model.
 ```shell
 uv run --with mellea docs/examples/tutorial/example.py
 ```

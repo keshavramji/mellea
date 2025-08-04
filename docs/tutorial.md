@@ -54,6 +54,7 @@ We also recommend that you download and install [uv](https://docs.astral.sh/uv/#
 ```bash
 uv run example_name.py --with mellea
 ```
+> NOTE: If running on an Intel mac, you may get errors related to torch/torchvision versions. Conda maintains updated versions of these packages. You will need to create a conda environment and run `conda install 'torchvision>=0.22.0'` (this should also install pytorch and torchvision-extra). Then, you should be able to run `uv pip install .`. To run the examples, you will need to use `python <filename>` inside the conda environment instead of `uv run --with mellea <filename>`.
 
 Once you have ollama installed and running, we can get started with our first generative piece of code:
 
