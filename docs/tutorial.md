@@ -28,21 +28,22 @@ This tutorial is about Mellea. Mellea helps you write better generative programs
 
 A *generative program* is any computer program that contains calls to an LLM. As we will see throughout the tutorial, LLMs can be incorporated into software in a wide variety of ways. Some ways of incorporating LLMs into programs tend to result in robust and performant systems, while others result in software that is brittle and error-prone.
 
-**Generative programs should circumscribe LLM calls**
+Generative programs are distinguished from classical programs by their use of functions that invoke generative models. These generative calls can produce many different data types -- strings, booleans, structured data, code, images/video, and so on. The model(s) and software underlying generative calls can be combined and composed in certain situations and in certain ways (e.g., LoRA adapters as a special case). In addition to invoking generative calls, generative programs can invoke other functions, written in languages that do not have an LLM in their base, so that we can, for example, pass the output of a generative function into a DB retrieval system and feed the output of that into another generator. Writing generative programs is difficult because generative programs interleave deterministic and stochastic operations.
 
- Generative programming requires careful control over where and how LLMs are invoked. Like calling out to a database or an external API, LLM calls introduce a zone of uncertainty into your system. To manage this uncertainty, programs should make the boundaries of LLM interaction explicit. This means placing LLM calls behind clearly defined interfaces and wrapping them with pre-conditions (which validate inputs before the call), post-conditions (which check outputs), and—in more complex flows—loop invariants that preserve correctness over repeated interactions. By isolating LLMs in this way, we can reason about their behavior, validate their contributions, and recover gracefully from failure.
+Requirement verification plays an important role in circumscribing periods of nondeterminism in a generative program.  We can implement validators that produce boolean or other outputs, and repeat loops until the validator says yes, or perhaps the iteration count gets too high and we trigger some exception handling process. Thus we can determine the degree of certainty in the output of a generative function and then act based upon the amount of certainty. Verification can happen in a variety of ways -- from querying a generative function, to precise programmatic checks, and a variety of combinations besides.
 
-**Generative programs should use simple and composable prompting styles.** 
+In programs that contain long computation paths -- including most that contain iteration or recursion -- incremental accrual of uncertainty is multiplicative, and therefore must itself be occasionally circumscribed by incremental requirement verification throughout the generative program's execution. These incremental checks can be used to establish patterns of variation, or properties which are invariant, both of which can help ensure that the execution converges to a desired state and does not "go wrong". The construction of these incremental checks is one of the important tasks in generative programming, and can itself be treated as a task amenable to generative programming. Like other requirement checks, these variants and invariants may be explicit and programmatic or can be solved via a generative function. In any case, each generative program results in a trace of computations -- some successful, others failures.
 
- Prompting is the most basic form of programming with LLMs, but it is also one of the most fragile. Long, monolithic prompts tend to be brittle: LLMs struggle with deep control flow, and prompt length comes at the cost of valuable context tokens. 
+Figuring out what to do about failure paths is yet another crux faced by authors of generative programs. Successful traces can be collected, leading to a final high-confidence result; alternatively, traces with some failures or low-confidence answers can accumulate. Generative programs then try to repair these failed validations. The repair process can be manual, or automated, or offer a combination of user interactions and automated repair mechanisms. As a generative program executes in this way, context accrues. The accrual of ever-larger contexts becomes a challenge unto itself.
 
- Instead, prompts should be short, modular, and built up step-by-step in code. This modularity enables ablation testing (removing or altering parts of the prompt to measure impact) and makes it easier to refactor or move logic elsewhere (e.g., into post-validation checks). When possible, rely on prompt formats that were explicitly included in post-training; models are more reliable when operating in familiar terrain.
+Memory management therefore plays an important role in context engineering. Mellea therefore provides a mechanism for mapping components of KV Cache onto developer and user-facing abstractions, and for automating the construction of context and handling of cached keys and values.
 
-**Generative programs should carefully manage context**
+As the Mellea developers built this library for generative programming, we found some useful principles that you will see re-occur throughout this tutorial:
 
- LLMs operate over a rolling window of context, and good generative programs must treat that context as a first-class concern. Each prompt and response becomes part of a conversation history that shapes future outputs. Without deliberate context management, programs risk losing important information or overwhelming the model with irrelevant text. The Mellea framework offers explicit tools—like mobjects and RichDocuments—for organizing and curating context. These allow developers to track, summarize, and manipulate conversation state in a structured way, ensuring that LLMs have access to the right information at the right time.
-
-**Conclusion**
+ * **circumscribe LLM calls with requirement verifiers.** We will see variations on this principle throughout the tutorial.
+ * **Generative programs should use simple and composable prompting styles.** Mellea takes a middle-ground between the "framework chooses the prompt" and "client code chooses the prompt" paradigms. By keeping prompts small and self-contained, then chaining together many such prompts, we can usually get away with one of a few prompt styles. When a new prompt style is needed, that prompt should be co-designed with the software that will use the prompt. In Mellea, we encourage this by decomposing generative programs into *Components*; more on this in [Chapter 3](#chapter-3-overview-of-the-standard-library).
+ * **Generative models and infererence-time programs should be co-designed.** Ideally, the style and domain of prompting used at inference time should match the style and domain of prompting using in pretraining, mid-training, and/or post-training. And, similarly, models should be built with runtime components and use-patterns in mind. We will see some early examples of this in [Chapter 6](#chapter-6-tuning-requirements-and-components).
+ * **Generative programs should carefully manage context.** Each Component manages context of a single call, as we see in Chapters [2](#chapter-2-getting-started-with-generative-programming-in-mellea), [3](#chapter-3-overview-of-the-standard-library), [4](#chapter-4-generative-slots), and [5](#chapter-5-mobjects). Additionally, Mellea provides some useful mechanisms for re-using context across multiple calls ([Chapter 7](#chapter-7-on-context-management)).
 
 Although good generative programs can be written in any language and framework, getting it right is not trivial. Mellea is just one point in the design space of LLM libraries, but we think it is a good one. Our hope is that Mellea will help you write generative programs that are robust, performant, and fit-for-purpose.
 
@@ -389,6 +390,9 @@ print("Output sentiment is:", sentiment)
 Here, `classify_sentiment` is a GenerativeSlot: it looks like a normal function, but its implementation is handled by the LLM. The type annotation (`Literal["positive", "negative"]`) constrains the output, and the prompt is automatically constructed from the function signature and docstring.
 
 Many more examples of generative slots are provided in the `docs/examples` directory.
+
+> [!NOTE]
+> Generative slots can also be implemented as code-generation calls instead of black-box structured output generators. This is most useful when correct code generation is difficult without some dynamic analysis (i.e., runtime information). In these cases, the problem can be solved by prompting with a FiTM code generation request, augmented with pieces of runtime state. This advanced functionality may result in untrusted code execution, and should therefore be used with caution and/or in conjunction with some combination of sandboxing and human validation prior to execution.
 
 #### Using Generative slots to Provide Compositionality Across Module Boundaries
 
@@ -1228,44 +1232,3 @@ For a specialized mify function to be added to the stdlib, it must work as both 
 While a less common need, Mellea allows you to create new types of sessions. When you need fine-grained control over context, it's advised that you completely override the `MelleaSession` methods.
 
 To institute gates on calls that get made or modify calls without modifying the underlying context, overriding the methods but calling the `MelleaSession` supermethod is advised. See [the `chat-checker` example](./examples/sessions/creating_a_new_type_of_session.py).
-
-
-## Appendix B: Future work
-
-TODO: CUT THIS?
-
-### Multimodal models
-
-You can now extract parts of the document, e.g. the figures...
-```python
-images = rd.get_images()
-selected_image = images[2]
-```
-
-...and run a query method on it:
-```python
-vision_model = OllamaVisionLanguageModel()
-
-description = selected_image.query("Describe the image in great detail.", backend=vision_model)
-```
-In this example, we use a VLM running locally on Ollama to generate a 
-description for the image. This description can then be used, e.g., to store 
-as metadata for the image in a retrieval database. 
-
-We can also just search brute force search for a specific image:
-```python
-from m import RichImage
-from typing import List
-
-def search_for_images(question:str, images: List[RichImage]) -> List[RichImage]:
-    results = [(im.query(question), im) for im in images]
-    results = filter(lambda x:x[0].toLowerKey.startswWith("yes"), results)
-    return [r[1] for r in results]
-
-banana_images = search_for_images("Does the image contain a banana?", 
-                                  rd.get_images())
-```
-The function iterates through the list of `RichImage` and checks if the 
-answer to the question is "yes". 
-
-
