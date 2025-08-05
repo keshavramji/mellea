@@ -8,11 +8,11 @@ from datasets import Dataset
 from peft import LoraConfig, PeftModelForCausalLM
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+import json
 
-INVOCATION_PROMPT = "<|start_of_role|>check_requirement<|end_of_role|>"
 
 
-def load_dataset_from_json(json_path, tokenizer):
+def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
     data = []
     with open(json_path, encoding="utf-8") as f:
         for line in f:
@@ -25,7 +25,7 @@ def load_dataset_from_json(json_path, tokenizer):
     for sample in data:
         item_text = sample.get("item", "")
         label_text = sample.get("label", "")
-        prompt = f"{item_text}\nRequirement: <|end_of_text|>\n{INVOCATION_PROMPT}"
+        prompt = f"{item_text}\nRequirement: <|end_of_text|>\n{invocation_prompt}"
         inputs.append(prompt)
         targets.append(label_text)
     return Dataset.from_dict({"input": inputs, "target": targets})
@@ -63,6 +63,7 @@ def train_model(
     dataset_path: str,
     base_model: str,
     output_file: str,
+    prompt_file: str = None,
     adapter: str = "alora",
     run_name: str = "multiclass_run",
     epochs: int = 6,
@@ -71,13 +72,21 @@ def train_model(
     max_length: int = 1024,
     grad_accum: int = 4,
 ):
+    if prompt_file:
+        # load the configurable variable invocation_prompt
+        with open(prompt_file, "r") as f:
+            config = json.load(f)
+        invocation_prompt = config["invocation_prompt"]
+    else:
+        invocation_prompt = "<|start_of_role|>check_requirement<|end_of_role|>"
+
     tokenizer = AutoTokenizer.from_pretrained(
         base_model, padding_side="right", trust_remote_code=True
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.add_special_tokens = False
 
-    dataset = load_dataset_from_json(dataset_path, tokenizer)
+    dataset = load_dataset_from_json(dataset_path, tokenizer, invocation_prompt)
     dataset = dataset.shuffle(seed=42)
     split_idx = int(len(dataset) * 0.8)
     train_dataset = dataset.select(range(split_idx))
@@ -86,14 +95,15 @@ def train_model(
     model_base = AutoModelForCausalLM.from_pretrained(
         base_model, device_map="auto", use_cache=False
     )
-    collator = DataCollatorForCompletionOnlyLM(INVOCATION_PROMPT, tokenizer=tokenizer)
+
+    collator = DataCollatorForCompletionOnlyLM(invocation_prompt, tokenizer=tokenizer)
 
     output_dir = os.path.dirname(output_file)
     os.makedirs(output_dir, exist_ok=True)
 
     if adapter == "alora":
         peft_config = aLoraConfig(
-            invocation_string=INVOCATION_PROMPT,
+            invocation_string=invocation_prompt,
             r=32,
             lora_alpha=32,
             lora_dropout=0.05,
@@ -102,7 +112,7 @@ def train_model(
             target_modules=["q_proj", "k_proj", "v_proj"],
         )
         response_token_ids = tokenizer(
-            INVOCATION_PROMPT, return_tensors="pt", add_special_tokens=False
+            invocation_prompt, return_tensors="pt", add_special_tokens=False
         )["input_ids"]
         model = aLoRAPeftModelForCausalLM(
             model_base, peft_config, response_token_ids=response_token_ids

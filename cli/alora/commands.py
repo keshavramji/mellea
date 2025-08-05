@@ -9,6 +9,7 @@ def alora_train(
     datafile: str = typer.Argument(..., help="JSONL file with item/label pairs"),
     basemodel: str = typer.Option(..., help="Base model ID or path"),
     outfile: str = typer.Option(..., help="Path to save adapter weights"),
+    promptfile: str = typer.Option(None, help="Path to load the prompt format file"),
     adapter: str = typer.Option("alora", help="Adapter type: alora or lora"),
     epochs: int = typer.Option(6, help="Number of training epochs"),
     learning_rate: float = typer.Option(6e-6, help="Learning rate"),
@@ -29,6 +30,7 @@ def alora_train(
         batch_size=batch_size,
         max_length=max_length,
         grad_accum=grad_accum,
+        prompt_file=promptfile,
     )
 
 
