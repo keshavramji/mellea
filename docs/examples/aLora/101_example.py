@@ -18,8 +18,8 @@ backend = LocalHFBackend(
 backend.add_alora(
     HFConstraintAlora(
         name="custom_construant",
-        path_or_model_id="my_uploaded_model/goes_here", # can also be the checkpoint path
-        generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>", 
+        path_or_model_id="my_uploaded_model/goes_here",  # can also be the checkpoint path
+        generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
         backend=backend,
     )
 )
@@ -28,10 +28,12 @@ backend.add_alora(
 m = MelleaSession(backend, ctx=LinearContext())
 
 # define a requirement
-failure_check = req("The failure mode shoud not be none.")
+failure_check = req("The failure mode should not be none.")
 
 # run instruction with requirement attached on the base model
-res = m.instruct("Write triage summaries based on technician note.", requirements=[failure_check])
+res = m.instruct(
+    "Write triage summaries based on technician note.", requirements=[failure_check]
+)
 
 print("==== Generation =====")
 print(f"Model Output: {res}")

@@ -8,8 +8,6 @@ from datasets import Dataset
 from peft import LoraConfig, PeftModelForCausalLM
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
-import json
-
 
 
 def load_dataset_from_json(json_path, tokenizer, invocation_prompt):
@@ -63,7 +61,7 @@ def train_model(
     dataset_path: str,
     base_model: str,
     output_file: str,
-    prompt_file: str = None,
+    prompt_file: str | None = None,
     adapter: str = "alora",
     run_name: str = "multiclass_run",
     epochs: int = 6,
@@ -74,7 +72,7 @@ def train_model(
 ):
     if prompt_file:
         # load the configurable variable invocation_prompt
-        with open(prompt_file, "r") as f:
+        with open(prompt_file) as f:
             config = json.load(f)
         invocation_prompt = config["invocation_prompt"]
     else:
