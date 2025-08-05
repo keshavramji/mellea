@@ -58,14 +58,14 @@ m = "cli.m:cli"
 [project.optional-dependencies]
 # Use these like:
 # pip install -e .[dev]
-# pip install generative_computing[dev]
+# pip install mellea[dev]
 dev = ["mypy", "mypy-extensions", "tomli", "codespell"]
 sphinx = ["sphinx_rtd_theme", "sphinx-autodoc-typehints", "sphinx_mdinclude"]
 
 [dependency-groups]
 # Use these like:
 # pip install -e . --group dev
-# pip install generative_computing --group dev
+# pip install mellea --group dev
 dev = [
     "isort>=6.0.0",
     "pre-commit>=4.2.0",
