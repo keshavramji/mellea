@@ -68,9 +68,11 @@ class ModelOption:
                 del new_options[old_key]
 
         if len(conflict_log) > 0:
-            FancyLogger.get_logger().warning(
-                f"Encountered conflict(s) when replacing keys. Could not replace keys for:\n{'\n'.join(conflict_log)}"
+            text_line = (
+                "Encountered conflict(s) when replacing keys. Could not replace keys for:\n"
+                + "\n".join(conflict_log)
             )
+            FancyLogger.get_logger().warning(f"{text_line}")
         return new_options
 
     @staticmethod

@@ -254,9 +254,10 @@ class LocalHFBackend(FormatterBackend, AloraBackendMixin):
         )
 
         if generate_logs is not None:
+            mess = user_message.replace("\n", "\\n")
+            assist_mess = assistant_message.replace("\n", "\\n")
             log = GenerateLog(
-                prompt=f"aLora(name='{alora_for_this_request.name}', input='{user_message.replace('\n', '\\n')}', "
-                f"response='{assistant_message.replace('\n', '\\n')}', constraint='{action.description}') ",  # type:ignore
+                prompt=f"aLora(name='{alora_for_this_request.name}', input='{mess}', response='{assist_mess}', constraint='{action.description}') ",  # type: ignore
                 result=ModelOutputThunk(alora_output),
                 model_options=model_options,
                 date=datetime.datetime.now(),
