@@ -710,10 +710,15 @@ Every native function of `Table` is automatically registered as a tool to the tr
 
 ## Chapter 6: Tuning Requirements and Components
 
-One of the main principles of generative programming is that you should prompt models in the same way that the models were aligned. But what if you are introducing a custom Component that is not covered in the model's training data? Off-shelf-models sometimes fail to recognize important business constraints, or you may have proprietary labeled data for classification or intent detection. In this tutorial, we walk through fine-tuning a LoRA adapter using classification data to enhance a requirement checker. We then explain how this fine-tuned adapter can be incorporated into a Mellea program.
+One of the main principles of generative programming is that you should prompt models in the same way that the models were aligned. But sometimes off-the-shelf models are insufficient. Here are some scenarios we have encountered:
 
+ * you are introducing a custom Component with non-trivial semantics that are not well-covered by any existing model's training data
+ * off-shelf-models fail to recognize important business constraints
+ * you have a proprietary labeled dataset which you would like to use for improving classification, intent detection, or another requirement-like task.
+ 
+The third case is very common. In this tutorial we will explore a case-study focused on that case. we walk through fine-tuning a LoRA adapter using classification data to enhance a requirement checker. We then explain how this fine-tuned adapter can be incorporated into a Mellea program.
 
-### The Problem
+### Problem Statement
 
 The Stembolt MFG Corporation we encountered in [Chapter 4](#chapter-4-generative-slots) is now is developing an AI agent to improve its operational efficiency and resilience. A key component of this pipeline is the AutoTriage module. AutoTriage is responsible for automatically mapping free-form defect reports into categories like mini-carburetor, piston, connecting rod, flywheel, piston rings, no_failure.
 
@@ -731,7 +736,6 @@ Here's peak at a small subset of Stembolt MFG's carefully [dataset of stembolt f
 Notice that the last item is labeled "no_failure", because the root cause of that issue is user error. Stembolts are difficult to use and require specialized training; approximately 20% of reported failures are actually operator error. Classifying operator error as early in the process as possible -- and with sufficient accuracy -- is an important KPI for the customer service and repairs department of the Stembolt division.
 
 Let's see how Stembolt MFG Corporation can use tuned LoRAs to implement the AutoTriage step in a larger Mellea application.
-
 
 ### Training the aLoRA Adapter
 
@@ -755,6 +759,7 @@ m alora train /to/stembolts_data.jsonl \
 The default prompt format is `<|start_of_role|>check_requirement<|end_of_role|>`; this prompt should be appended to the context just before activated our newly trained aLoRA. If needed, you can customize this prompt using the `--promptfile` argument.
 
 #### Parameters
+
 While training adapters, you can easily tuning the hyper-parameters as below:
 
 | Flag              | Type    | Default   | Description                                      |
@@ -790,12 +795,13 @@ If you get a permissions error, make sure you are logged in to Huggingface:
 huggingface-cli login  # Optional: only needed for uploads
 ```
 
-> **Note on Privacy:** Before uploading your trained model to the Hugging Face Hub, consider whether your training data includes any proprietary, confidential, or sensitive information. Language models can unintentionally memorize details from small or domain-specific datasets. 
+> [!NOTE]
+> **Warning on Privacy:** Before uploading your trained model to the Hugging Face Hub, review the visibility carefully. If you will be sharing your model with the public, consider whether your training data includes any proprietary, confidential, or sensitive information. Language models can unintentionally memorize details, and this problem compounds when operating over small or domain-specific datasets. 
 
 
 ### Integrating the Tuned Model into Mellea
 
-After we have trained an aLoRA classifier for our task, we would like to use that classifier to check requirements in a Mellea program. First, we need to setup our backend for using the aLoRA classifier:
+After training an aLoRA classifier for our task, we would like to use that classifier to check requirements in a Mellea program. First, we need to setup our backend for using the aLoRA classifier:
 
 ```python
 backend = ...

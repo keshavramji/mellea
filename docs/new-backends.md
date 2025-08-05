@@ -1,2 +1,0 @@
-# Contributing a New Backend
-
