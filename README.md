@@ -8,7 +8,7 @@ with structured, maintainable, robust, and efficient AI workflows.
 
 
 [//]: # ([![arXiv]&#40;https://img.shields.io/badge/arXiv-2408.09869-b31b1b.svg&#41;]&#40;https://arxiv.org/abs/2408.09869&#41;)
-[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](../)
+[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://docs.mellea.ai/)
 [![PyPI version](https://img.shields.io/pypi/v/mellea)](https://pypi.org/project/mellea/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mellea)](https://pypi.org/project/mellea/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
@@ -55,7 +55,7 @@ uv pip install .
 
 For running a simple LLM request locally (using Ollama with Granite model), this is the starting code:
 ```python
-# filename: docs/examples/tutorial/example.py
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/example.py
 import mellea
 
 m = mellea.start_session()
@@ -104,7 +104,7 @@ the output is checked against the constraints using (in this case) LLM-as-a-judg
 
 
 ```python
-# filename: example_val.py
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/instruct_validate_repair/101_email_with_validate.py
 from mellea import MelleaSession
 from mellea.backends.types import ModelOption
 from mellea.backends.ollama import OllamaModelBackend
@@ -141,6 +141,7 @@ using Mellea's generative slots and a local LLM.
 
 
 ```python
+# file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/sentiment_classifier.py#L1-L13
 from typing import Literal
 from mellea import generative, start_session
 

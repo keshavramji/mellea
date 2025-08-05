@@ -728,7 +728,7 @@ The Stembolt MFG Corporation we encountered in [Chapter 4](#chapter-4-generative
 
 To ensure the generated output meets specific downstream system requirements, we require that each defect summary contains an identified failure mode. Unfortunately, LLMs perform poorly on this task out-of-the-box; stembolts are a niche device and detect reports are not commonly discussed on the open internet. Fortunately, over the years, Stembolt MFG has collected a large dataset mapping notes to part failures, and this is where the classifier trained via aLoRA comes in.
 
-Here's peak at a small subset of Stembolt MFG's carefully [dataset of stembolt failure modes](https://github.ibm.com/granite-runtime/mellea/blob/main/docs/examples/aLora/stembolt_failure_dataset.jsonl):
+Here's peak at a small subset of Stembolt MFG's carefully [dataset of stembolt failure modes](https://github.com/generative-computing/mellea/blob/main/docs/examples/aLora/stembolt_failure_dataset.jsonl):
 
 ```json
 {"item": "Observed black soot on intake. Seal seems compromised under thermal load.", "label": "piston rings"}
