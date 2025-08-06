@@ -114,7 +114,7 @@ from mellea.stdlib.sampling import RejectionSamplingStrategy
 # create a session with Mistral running on Ollama
 m = MelleaSession(
     backend=OllamaModelBackend(
-        model_id=model_ids.MISTRALAI_MISTRAL_0_3_7b,
+        model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B,
         model_options={ModelOption.MAX_NEW_TOKENS: 300},
     )
 )

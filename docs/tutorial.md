@@ -747,9 +747,13 @@ Mellea provides a command-line interface for training [LoRA](https://arxiv.org/a
 
 We will train a lightweight adapter with the `m alora train` command on this small dataset:
 
+> [!NOTE]
+> This script will require access to a gpu to run. You could also run this on your cpu, but it might take a while.
+> For mac users, you might not be able to run this script as is, given the lack of `fp16` support in the accelerate library.
+
 ```bash
 m alora train /to/stembolts_data.jsonl \
-  --promtfile ./prompt_config.json \
+  --promptfile ./prompt_config.json \
   --basemodel ibm-granite/granite-3.2-8b-instruct \
   --outfile ./checkpoints/alora_adapter \
   --adapter alora \

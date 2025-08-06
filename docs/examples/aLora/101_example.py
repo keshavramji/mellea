@@ -1,38 +1,40 @@
 import time
 
 from mellea import LinearContext, MelleaSession
-from mellea.backends.aloras.huggingface.granite_aloras import (
-    HFConstraintAlora,
-    add_granite_aloras,
-)
+from mellea.backends.aloras.huggingface.granite_aloras import HFConstraintAlora
 from mellea.backends.cache import SimpleLRUCache
 from mellea.backends.huggingface import LocalHFBackend
 from mellea.stdlib.base import GenerateLog
-from mellea.stdlib.requirement import Requirement, req
+from mellea.stdlib.requirement import ALoraRequirement, Requirement
 
 # Define a backend and add the constraint aLora
 backend = LocalHFBackend(
     model_id="ibm-granite/granite-3.2-8b-instruct", cache=SimpleLRUCache(5)
 )
 
-backend.add_alora(
-    HFConstraintAlora(
-        name="custom_construant",
-        path_or_model_id="my_uploaded_model/goes_here",  # can also be the checkpoint path
-        generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
-        backend=backend,
-    )
+custom_stembolt_failure_constraint = HFConstraintAlora(
+    name="custom_stembolt_failure_constraint",
+    path_or_model_id="docs/examples/aLora/checkpoints/alora_adapter",  # can also be the checkpoint path
+    generation_prompt="<|start_of_role|>check_requirement<|end_of_role|>",
+    backend=backend,
 )
+
+backend.add_alora(custom_stembolt_failure_constraint)
 
 # Create M session
 m = MelleaSession(backend, ctx=LinearContext())
 
 # define a requirement
-failure_check = req("The failure mode should not be none.")
+failure_check = ALoraRequirement(
+    "The failure mode should not be none.", alora=custom_stembolt_failure_constraint
+)
 
 # run instruction with requirement attached on the base model
 res = m.instruct(
-    "Write triage summaries based on technician note.", requirements=[failure_check]
+    """Write triage summaries based on technician note.
+    1. Oil seepage around piston rings suggests seal degradation
+    """,
+    requirements=[failure_check],
 )
 
 print("==== Generation =====")
@@ -77,9 +79,11 @@ def validate_reqs(reqs: list[Requirement]):
 
 
 # run with aLora -- which is the default if the constraint alora is added to a model
-validate_reqs([failure_check])
+computetime_alora, alora_result = validate_reqs([failure_check])
 
+# NOTE: This is not meant for use in regular programming using mellea, but just as an illustration for the speedup you can get with aloras.
 # force to run without alora
 backend.default_to_constraint_checking_alora = False
-validate_reqs([failure_check])
-backend.default_to_constraint_checking_alora = True
+computetime_no_alora, no_alora_result = validate_reqs([failure_check])
+
+print(f"Speed up time with using aloras is {computetime_alora - computetime_no_alora}")
