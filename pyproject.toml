@@ -15,7 +15,7 @@ authors = [
     { name = "Xiaojie Guo", email = "xiaojie.guo@ibm.com" },
     { name = "Jake LoRocco", email = "jake.lorocco@ibm.com" }
 ]
-description = "mellea is a librarty for writing generative programs"
+description = "mellea is a library for writing generative programs"
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
