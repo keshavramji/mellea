@@ -19,7 +19,7 @@
   - [The Guarded Nondeterminism Pattern](#guarded-nondeterminism)
 - [Chapter 9: Interoperability with Other Frameworks](#chapter-9-interoperability-with-other-frameworks)
 - [Chapter 10: Prompt Engineering for Mellea](#chapter-10-prompt-engineering-for-m)
-  - [Custom  Templates](#custom--templates)
+  - [Custom  Templates](#custom-templates)
 - [Appendix: Contributing to Melles](#appendix-contributing-to-mellea)
 
 ## Chapter 1: What Is Generative Programming
@@ -311,7 +311,7 @@ final_options = {
 
 ### Conclusion
 
-We have now worked up from a simple "Hello, World" example to our first generative programming design pattern: **Instruct - Validate - Reapir (IVR)**.
+We have now worked up from a simple "Hello, World" example to our first generative programming design pattern: **Instruct - Validate - Repair (IVR)**.
 
 When LLMs work well, the software developer experiences the LLM as a sort of oracle that can handle most any input and produce a sufficiently desirable output. When LLMs do not work at all, the software developer experiences the LLM as a naive markov chain that produces junk. In both cases, the LLM is just sampling from a distribution.
 
@@ -419,7 +419,7 @@ def summarize_contract(contract_text: str) -> str:
 
 @generative
 def summarize_short_story(story: str) -> str:
-  """Summarize a short story, with one paragraph on plot and one paragraph on braod themes."""
+  """Summarize a short story, with one paragraph on plot and one paragraph on broad themes."""
 ```
 
 ```python
@@ -542,7 +542,7 @@ else:
     print("Summary lacks a structured conclusion.")
 ```
 
-Without these Hoare-style contracts, the only way to ensure composition is to couple the libraries, either by rewriting `summarize_meeting` to conform to `propose_business_decision`, or adding Requirements to `propose_business_decision` that may silently fail if unmet. These approahces can work, but require tight coupling between these two otherwise loosely couple libraries.
+Without these Hoare-style contracts, the only way to ensure composition is to couple the libraries, either by rewriting `summarize_meeting` to conform to `propose_business_decision`, or adding Requirements to `propose_business_decision` that may silently fail if unmet. These approaches can work, but require tight coupling between these two otherwise loosely coupled libraries.
 
 With contracts, we **decouple** the libraries without sacrificing safe dynamic composition, by moving the coupling logic into pre- and post-condition checks. This is another LLM-native software engineering pattern: **guarded nondeterminism**.
 
@@ -743,7 +743,7 @@ Let's see how Stembolt MFG Corporation can use tuned LoRAs to implement the Auto
 
 ### Training the aLoRA Adapter
 
-Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/alora) adapters.  Classical LoRAs must re-process our entire context, which can get experience for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
+Mellea provides a command-line interface for training [LoRA](https://arxiv.org/abs/2106.09685) or [aLoRA](https://github.com/IBM/activated-lora) adapters.  Classical LoRAs must re-process our entire context, which can get expensive for quick checks happening within an inner loop (such as requirement checking). The aLoRA method allows us to adapt a base LLM to new tasks, and then run the adapter with minimal compute overhead. The adapters are fast to train and fast to switch between.
 
 We will train a lightweight adapter with the `m alora train` command on this small dataset:
 
@@ -781,7 +781,7 @@ While training adapters, you can easily tuning the hyper-parameters as below:
 
 ### Upload to Hugging Face (Optional)
 
-To share or reuse the trained adapter by using the `m alora upload` command to publish your trained adapter:
+To share or reuse the trained adapter, use the `m alora upload` command to publish your trained adapter:
 
 ```bash
 m alora upload ./checkpoints/alora_adapter \
@@ -823,7 +823,7 @@ backend.add_alora(
 )
 ```
 
-In the above arguments, `path_or_model_id` refers to the model checkpoint which got from last step, i.e., `m alora train` process. 
+In the above arguments, `path_or_model_id` refers to the model checkpoint from last step, i.e., the `m alora train` process. 
 
 > [!NOTE]
 > The `generation_prompt` passed to your `backend.add_alora` call should exactly match the prompt used for training.
@@ -908,7 +908,7 @@ m = mellea.MelleaSession(
 )
 ```
 
-The `SimpleContext` -- which is the only context we have used so far -- is a context manager that resets the chat message history on each model call. That is, the model's context is entirely determined by the current Component. Mellea also provides a `LinearContext`, which behaves like a chat history. We can use the LinearContext to interact with cat hmodels:
+The `SimpleContext` -- which is the only context we have used so far -- is a context manager that resets the chat message history on each model call. That is, the model's context is entirely determined by the current Component. Mellea also provides a `LinearContext`, which behaves like a chat history. We can use the LinearContext to interact with chat models:
 
 ```python
 # file: https://github.com/generative-computing/mellea/blob/main/docs/examples/tutorial/context_example.py#L1-L5
@@ -1216,7 +1216,7 @@ def serve(
 )
 ```
 
-the `m serve` command then subsequently takes this funcition and runs a server that is openai compatible. For more information, please have a look at [this file](./examples/tutorial/m_serve_example.py) for how to write an `m serve` compatible program. To run the example: 
+the `m serve` command then subsequently takes this function and runs a server that is openai compatible. For more information, please have a look at [this file](./examples/tutorial/m_serve_example.py) for how to write an `m serve` compatible program. To run the example: 
 
 ```shell
 m serve docs/examples/tutorial/m_serve_example.py
@@ -1254,7 +1254,7 @@ It also contains either of the following fields
 By writing a new template and/or changing the TemplateRepresentation of a component you can customize the textual representation. You can also customize based on the model.
 
 #### Choosing a Template
-Assuming a component's TemplateRepresentation contains a `template_order` field, the default TemplateFormatter grabs the relevant template by looing at the following places in order for each template in the `template_order`:
+Assuming a component's TemplateRepresentation contains a `template_order` field, the default TemplateFormatter grabs the relevant template by looking at the following places in order for each template in the `template_order`:
 1. the formatter's cached templates if the template has been looked up recently
 2. the formatter's specified template path
 3. the package that the object getting formatted is from (either 'mellea' or some third party package)
