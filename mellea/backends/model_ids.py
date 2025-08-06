@@ -118,6 +118,17 @@ QWEN3_8B = ModelIdentifier(hf_model_name="Qwen/Qwen3-8B", ollama_name="qwen3:8b"
 
 QWEN3_14B = ModelIdentifier(hf_model_name="Qwen/Qwen3-14B", ollama_name="qwen3:14b")
 
+######################
+#### OpenAI models ###
+######################
+
+OPENAI_GPT_OSS_20B = ModelIdentifier(
+    hf_model_name="openai/gpt-oss-20b", ollama_name="gpt-oss:20b"
+)
+OPENAI_GPT_OSS_120B = ModelIdentifier(
+    hf_model_name="openai/gpt-oss-120b", ollama_name="gpt-oss:120b"
+)
+
 #####################
 #### Misc models ####
 #####################
