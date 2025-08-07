@@ -39,12 +39,17 @@ with structured, maintainable, robust, and efficient AI workflows.
 
 
 ## Getting Started
+
+You can get started with a local install, or by using Colab notebooks.
+
+### Getting Started with Local Infernece
+
 <img src="docs/GetStarted_py.png" style="max-width:800px">
 
 Install with pip:
 
 ```bash
-uv pip install .
+uv pip install mellea
 ```
 
 > [!NOTE]
@@ -68,6 +73,23 @@ Then run it:
 ```shell
 uv run --with mellea docs/examples/tutorial/example.py
 ```
+
+### Get Started with Colab
+
+| Notebook | Try in Colab | Goal |
+|----------|--------------|------|
+| Hello, World | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Quick‑start demo |
+| Simple Email | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/simple_email.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Using the `m.instruct` primitive |
+| Instruct-Validate-Repair | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/instruct_validate_repair.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Introduces our first generative programming design pattern |
+| Model Options | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notsbooks/model_options_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Demonstrates how to pass model options through to backends |
+| Sentiment Classifier | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/sentiment_classifier.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Introduces the `@generative` decorator |
+| Managing Context | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main//docs/examples/notebooks/context_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Shows how to construct and manage context in a `MelleaSession` |
+| Generative OOP | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/table_mobject.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Demonstrates object-oriented generative programming in Mellea |
+| Rich Documents | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/document_mobject.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | A generative program that uses Docling to work with rich-text documents |
+| Composing Generative Functions | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/compositionality_with_generative_slots.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Demonstrates contract-oriented programming in Mellea |
+| `m serve` | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/m_serve_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Serve a generative program as an openai-compatible model endpoint |
+| MCP | <a href="https://colab.research.google.com/github/generative-computing/mellea/blob/main/docs/examples/notebooks/mcp_example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a> | Mellea + MCP |
+
 
 ### Installing from source
 
