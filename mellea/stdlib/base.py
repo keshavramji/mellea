@@ -340,6 +340,9 @@ class LinearContext(BasicContext):
         return self._ctx
 
     def is_chat_history(self):
+        FancyLogger.get_logger().warning(
+            "is_chat_history doesn't work properly, because ModelOutputThunks are not Messages."
+        )
         """Returns true if everything in the LinearContext is a chat `Message`."""
         return all(
             str(type(x)) == "Message" for x in self._ctx

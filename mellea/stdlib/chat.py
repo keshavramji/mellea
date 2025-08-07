@@ -3,7 +3,15 @@
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from mellea.stdlib.base import Component, ModelToolCall, TemplateRepresentation
+from mellea.helpers.fancy_logger import FancyLogger
+from mellea.stdlib.base import (
+    CBlock,
+    Component,
+    Context,
+    ModelOutputThunk,
+    ModelToolCall,
+    TemplateRepresentation,
+)
 
 
 class Message(Component):
@@ -85,3 +93,28 @@ class ToolMessage(Message):
     def __str__(self):
         """Pretty representation of messages, because they are a special case."""
         return f'mellea.Message(role="{self.role}", content="{self.content}", name="{self.name}")'
+
+
+def as_chat_history(ctx: Context) -> list[Message]:
+    """Returns a list of Messages corresponding to a Context."""
+
+    def _to_msg(c: CBlock | Component | ModelOutputThunk) -> Message | None:
+        match c:
+            case Message():
+                return c
+            case ModelOutputThunk():
+                match c.parsed_repr:
+                    case Message():
+                        return c.parsed_repr
+                    case _:
+                        return None
+            case _:
+                return None
+
+    linearized_ctx = ctx.linearize()
+    if linearized_ctx is None:
+        raise Exception("Trying to cast a non-linear history into a chat history.")
+    else:
+        history = [_to_msg(c) for c in linearized_ctx]
+        assert None not in history, "Could not render this context as a chat history."
+        return history  # type: ignore
