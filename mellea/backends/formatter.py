@@ -166,7 +166,7 @@ class TemplateFormatter(Formatter, abc.ABC):
         )
         match ctx:
             case LinearContext():
-                linearized_ctx = ctx.linearize()
+                linearized_ctx = ctx.render_for_generation()
                 assert linearized_ctx is not None
                 return "".join([self.print(x) for x in linearized_ctx])
             case SimpleContext():

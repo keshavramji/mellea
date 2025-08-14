@@ -275,8 +275,9 @@ class MelleaSession:
 
         parsed_assistant_message = output_thunk.parsed_repr
         assert type(parsed_assistant_message) is Message
-        self.ctx.insert(user_message)
-        self.ctx.insert(output_thunk, generate_logs=generate_logs)
+        self.ctx.insert_turn(
+            ContextTurn(user_message, output_thunk), generate_logs=generate_logs
+        )
         return parsed_assistant_message
 
     def act(self, c: Component, tool_calls: bool = False) -> Any:

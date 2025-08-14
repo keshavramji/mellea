@@ -151,7 +151,7 @@ def test_print_context(tf: TemplateFormatter):
         def _hash_for_kv_cache(self):
             pass
 
-        def linearize(self) -> Optional[List[Component | CBlock]]:
+        def render_for_generation(self) -> Optional[List[Component | CBlock]]:
             pass
 
         def last_output(self) -> ModelOutputThunk | None:

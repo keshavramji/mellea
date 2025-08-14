@@ -327,7 +327,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
                 )
 
         # Construct the linearized context. This is very similar to normal generation.
-        linearized_ctx = ctx.linearize()
+        linearized_ctx = ctx.render_for_generation()
         assert linearized_ctx is not None and len(linearized_ctx) > 1
         msgs = self.formatter.to_chat_messages(linearized_ctx)
         user_message, assistant_message = msgs[-2].content, msgs[-1].content
@@ -362,7 +362,7 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         model_opts = self._simplify_and_merge(
             model_options, is_chat_context=ctx.is_chat_context
         )
-        linearized_context = ctx.linearize()
+        linearized_context = ctx.render_for_generation()
         assert linearized_context is not None, (
             "Cannot generate from a non-linear context in a FormatterBackend."
         )
