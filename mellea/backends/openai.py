@@ -18,7 +18,6 @@ from transformers import AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 import mellea.backends.model_ids as model_ids
-from cli.serve.models import ChatCompletionMessage
 from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
