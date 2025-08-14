@@ -18,6 +18,7 @@ from transformers import AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 import mellea.backends.model_ids as model_ids
+from cli.serve.models import ChatCompletionMessage
 from mellea.backends import BaseModelSubclass
 from mellea.backends.aloras import Alora, AloraBackendMixin
 from mellea.backends.formatter import Formatter, FormatterBackend, TemplateFormatter
@@ -557,8 +558,8 @@ class OpenAIBackend(FormatterBackend, AloraBackendMixin):
         calls = chat_response.choices[0].message.tool_calls
         if calls:
             for tool_call in calls:
-                tool_name = tool_call.function.name
-                tool_args = tool_call.function.arguments
+                tool_name = tool_call.function.name  # type: ignore
+                tool_args = tool_call.function.arguments  # type: ignore
 
                 func = tools.get(tool_name)
                 if func is None:
