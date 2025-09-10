@@ -10,6 +10,7 @@ from mellea import start_session, MelleaSession
 from mellea.backends import ModelOption
 from mellea.stdlib.base import ImageBlock, ModelOutputThunk
 from mellea.stdlib.chat import Message
+from mellea.stdlib.instruction import Instruction
 
 
 @pytest.fixture(scope="module")
@@ -24,8 +25,10 @@ def m_session(gh_run):
         )
     else:
         m = start_session(
-            "ollama",
+            "openai",
             model_id="granite3.2-vision",
+            base_url=f"http://{os.environ.get('OLLAMA_HOST', 'localhost:11434')}/v1",
+            api_key="ollama",
             model_options={ModelOption.MAX_NEW_TOKENS: 5},
         )
     yield m
@@ -69,14 +72,46 @@ def test_image_block_in_instruction(m_session: MelleaSession, pil_image: Image.I
     if not gh_run == 1:
         assert "yes" in instr.value.lower() or "no" in instr.value.lower()
 
-    # make sure you get the last prompt
-    lp = m_session.last_prompt()
-    assert isinstance(lp, list)
-    assert "images" in lp[0]
+    # make sure you get the last action
+    _, log = m_session.ctx.last_output_and_logs()
+    last_action = log.action
+    assert isinstance(last_action, Instruction)
+    assert len(last_action._images) > 0
 
     # first image in image list should be the same as the image block
-    image0_str = lp[0]["images"][0]
-    assert image0_str == image_block._value
+    image0 = last_action._images[0]
+    assert image0 == image_block
+
+    # get prompt message
+    lp = log.prompt
+    assert isinstance(lp, list)
+    assert len(lp) == 1
+
+    # prompt message is a dict
+    prompt_msg = lp[0]
+    assert isinstance(prompt_msg, dict)
+
+    # ### OPENAI SPECIFIC TEST ####
+
+    # get content
+    content_list = prompt_msg.get("content", None)
+    assert isinstance(content_list, list)
+    assert len(content_list) == 2
+
+    # get the image content
+    content_img = content_list[1]
+    assert isinstance(content_img, dict)
+    assert content_img.get("type") == "image_url"
+
+    # image url
+    image_url = content_img.get("image_url")
+    assert image_url is not None
+    assert "url" in image_url
+
+    # check that the image is in the url content
+    assert image_block._value[:100] in image_url["url"]
+
+
 
 
 def test_image_block_in_chat(m_session: MelleaSession, pil_image: Image.Image, gh_run: int):
@@ -87,14 +122,44 @@ def test_image_block_in_chat(m_session: MelleaSession, pil_image: Image.Image, g
     if not gh_run == 1:
         assert "yes" in ct.content.lower() or "no" in ct.content.lower()
 
-    # make sure you get the last prompt
-    lp = m_session.last_prompt()
-    assert isinstance(lp, list)
-    assert "images" in lp[0]
+    # make sure you get the last action
+    _, log = m_session.ctx.last_output_and_logs()
+    last_action = log.action
+    assert isinstance(last_action, Message)
+    assert len(last_action.images) > 0
 
     # first image in image list should be the same as the image block
-    image0_str = lp[0]["images"][0]
+    image0_str = last_action.images[0]
     assert image0_str == ImageBlock.from_pil_image(pil_image)._value
+
+    # get prompt message
+    lp = log.prompt
+    assert isinstance(lp, list)
+    assert len(lp) == 1
+
+    # prompt message is a dict
+    prompt_msg = lp[0]
+    assert isinstance(prompt_msg, dict)
+
+    # ### OPENAI SPECIFIC TEST ####
+
+    # get content
+    content_list = prompt_msg.get("content", None)
+    assert isinstance(content_list, list)
+    assert len(content_list) == 2
+
+    # get the image content
+    content_img = content_list[1]
+    assert isinstance(content_img, dict)
+    assert content_img.get("type") == "image_url"
+
+    # image url
+    image_url = content_img.get("image_url")
+    assert image_url is not None
+    assert "url" in image_url
+
+    # check that the image is in the url content
+    assert ImageBlock.from_pil_image(pil_image)._value[:100] in image_url["url"]
 
 
 if __name__ == "__main__":
