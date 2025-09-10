@@ -6,6 +6,8 @@ import contextvars
 from copy import deepcopy
 from typing import Any, Literal, overload
 
+from PIL import Image as PILImage
+
 from mellea.backends import Backend, BaseModelSubclass
 from mellea.backends.formatter import FormatterBackend
 from mellea.backends.model_ids import (
@@ -22,6 +24,7 @@ from mellea.stdlib.base import (
     Context,
     ContextTurn,
     GenerateLog,
+    ImageBlock,
     LinearContext,
     ModelOutputThunk,
     SimpleContext,
@@ -228,6 +231,31 @@ class MelleaSession:
         """Summarizes the current context."""
         raise NotImplementedError()
 
+    @staticmethod
+    def _parse_and_clean_image_args(
+        images_: list[ImageBlock] | list[PILImage.Image] | None = None,
+    ) -> list[ImageBlock] | None:
+        images: list[ImageBlock] | None = None
+        if images_ is not None:
+            assert isinstance(images_, list), "Images should be a list or None."
+
+            if len(images_) > 0:
+                if isinstance(images_[0], PILImage.Image):
+                    images = [
+                        ImageBlock.from_pil_image(i)
+                        for i in images_
+                        if isinstance(i, PILImage.Image)
+                    ]
+                else:
+                    images = images_  # type: ignore
+                assert isinstance(images, list)
+                assert all(isinstance(i, ImageBlock) for i in images), (
+                    "All images should be ImageBlocks now."
+                )
+            else:
+                images = None
+        return images
+
     @overload
     def act(
         self,
@@ -357,6 +385,7 @@ class MelleaSession:
         self,
         description: str,
         *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -375,6 +404,7 @@ class MelleaSession:
         self,
         description: str,
         *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -392,6 +422,7 @@ class MelleaSession:
         self,
         description: str,
         *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
         requirements: list[Requirement | str] | None = None,
         icl_examples: list[str | CBlock] | None = None,
         grounding_context: dict[str, str | CBlock | Component] | None = None,
@@ -419,10 +450,14 @@ class MelleaSession:
             format: If set, the BaseModel to use for constrained decoding.
             model_options: Additional model options, which will upsert into the model/backend's defaults.
             tool_calls: If true, tool calling is enabled.
+            images: A list of images to be used in the instruction or None if none.
         """
+
         requirements = [] if requirements is None else requirements
         icl_examples = [] if icl_examples is None else icl_examples
         grounding_context = dict() if grounding_context is None else grounding_context
+
+        images = self._parse_and_clean_image_args(images)
 
         # All instruction options are forwarded to create a new Instruction object.
         i = Instruction(
@@ -433,6 +468,7 @@ class MelleaSession:
             user_variables=user_variables,
             prefix=prefix,
             output_prefix=output_prefix,
+            images=images,
         )
 
         return self.act(
@@ -450,6 +486,7 @@ class MelleaSession:
         content: str,
         role: Message.Role = "user",
         *,
+        images: list[ImageBlock] | list[PILImage.Image] | None = None,
         user_variables: dict[str, str] | None = None,
         format: type[BaseModelSubclass] | None = None,
         model_options: dict | None = None,
@@ -462,7 +499,8 @@ class MelleaSession:
             )
         else:
             content_resolved = content
-        user_message = Message(role=role, content=content_resolved)
+        images = self._parse_and_clean_image_args(images)
+        user_message = Message(role=role, content=content_resolved, images=images)
 
         result = self.act(
             user_message,
@@ -588,7 +626,8 @@ class MelleaSession:
                 chosen_tool = tools[0]
 
             FancyLogger.get_logger().warning(
-                f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"  # type: ignore
+                f"multiple tool calls returned in transform of {obj} with description '{transformation}'; picked `{chosen_tool.name}`"
+                # type: ignore
             )
 
         if chosen_tool:
