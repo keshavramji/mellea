@@ -34,7 +34,7 @@ class ModelOption:
 
         * If the destination key already exists in `options`, the original value is kept in the output.
 
-        * Regardless of the presense of the destination key in `options`,
+        * Regardless of the presence of the destination key in `options`,
           the source key is always absent in the output.
 
         Example:
