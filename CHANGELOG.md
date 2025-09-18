@@ -1,3 +1,9 @@
+## [v0.0.6](https://github.com/generative-computing/mellea/releases/tag/v0.0.6) - 2025-09-18
+
+### Feature
+
+* Test update pypi.yml for cd pipeline test ([#155](https://github.com/generative-computing/mellea/issues/155)) ([`91003e5`](https://github.com/generative-computing/mellea/commit/91003e572ed770da5c685cbc275facddb7700da6))
+
 ## [v0.0.5](https://github.com/generative-computing/mellea/releases/tag/v0.0.5) - 2025-09-17
 
 ### Feature
