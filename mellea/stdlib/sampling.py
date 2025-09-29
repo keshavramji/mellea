@@ -1,22 +1,15 @@
 """sampling methods go here."""
 
 import abc
-from collections.abc import Callable, Coroutine
 from copy import deepcopy
-from typing import Any
 
 import tqdm
 
-from mellea import LinearContext
+import mellea.stdlib.funcs as mfuncs
+from mellea.backends import Backend, BaseModelSubclass
+from mellea.helpers.async_helpers import wait_for_all_mots
 from mellea.helpers.fancy_logger import FancyLogger
-from mellea.stdlib.base import (
-    CBlock,
-    Component,
-    Context,
-    ContextTurn,
-    GenerateLog,
-    ModelOutputThunk,
-)
+from mellea.stdlib.base import CBlock, ChatContext, Component, Context, ModelOutputThunk
 from mellea.stdlib.chat import Message
 from mellea.stdlib.instruction import Instruction
 from mellea.stdlib.requirement import Requirement, ScorerRequirement, ValidationResult
@@ -28,12 +21,14 @@ class SamplingResult(CBlock):
     def __init__(
         self,
         result: ModelOutputThunk,
+        result_ctx: Context,
         success: bool,
         *,
         sample_generations: list[ModelOutputThunk] | None = None,
         sample_validations: list[list[tuple[Requirement, ValidationResult]]]
         | None = None,
         sample_actions: list[Component] | None = None,
+        sample_contexts: list[Context] | None = None,
     ):
         """Initialize a new instance of sampling results.
 
@@ -45,10 +40,12 @@ class SamplingResult(CBlock):
         """
         super().__init__(value=result.value)
         self.result = result
+        self.result_ctx = result_ctx
         self.success = success
         self.sample_generations = sample_generations
         self.sample_validations = sample_validations
         self.sample_actions = sample_actions
+        self.sample_contexts = sample_contexts
 
 
 class SamplingStrategy(abc.ABC):
@@ -58,25 +55,18 @@ class SamplingStrategy(abc.ABC):
     It allows setting custom validation and generation functions through properties.
     """
 
-    # the function signature here matches that of m.validate
-    validate: (
-        Callable[
-            [list[Requirement], Context, Any, Any],
-            Coroutine[Any, Any, list[ValidationResult]],
-        ]
-        | None
-    ) = None
-
-    generate: Callable[[Component, Context], ModelOutputThunk] | None = None
-
     @abc.abstractmethod
     async def sample(
         self,
         action: Component,
         context: Context,
+        backend: Backend,
         requirements: list[Requirement],
         *,
         validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
     ) -> SamplingResult:
         """This method is the abstract method for sampling a given instruction.
 
@@ -96,16 +86,7 @@ class BaseSamplingStrategy(SamplingStrategy):
     loop_budget: int
 
     def __init__(
-        self,
-        *,
-        loop_budget: int = 1,
-        validate: Callable[
-            [list[Requirement], Context, Any, Any],
-            Coroutine[Any, Any, list[ValidationResult]],
-        ]
-        | None = None,
-        generate: (Callable[[Component, Context], ModelOutputThunk] | None) = None,
-        requirements: list[Requirement] | None = None,
+        self, *, loop_budget: int = 1, requirements: list[Requirement] | None = None
     ):
         """Initialize a new instance of the class with default parameters.
 
@@ -121,29 +102,29 @@ class BaseSamplingStrategy(SamplingStrategy):
         assert loop_budget > 0, "Loop budget must be at least 1."
 
         self.loop_budget = loop_budget
-        self.validate = validate  # it's ok to be None here
-        self.generate = generate  # it's ok to be None here
         self.requirements = requirements
 
     @staticmethod
     @abc.abstractmethod
     def repair(
-        ctx: Context,
+        old_ctx: Context,
+        new_ctx: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> tuple[Component, Context]:
         """
         Repair function that is being invoked if not all requirements are fulfilled. It should return a next action component.
 
         Args:
-            ctx: The context to be passed to the sampling strategy.
+            old_ctx: The context WITHOUT the last action + output.
+            new_ctx: The context including the last action + output.
             past_actions: List of actions that have been executed (without success).
             past_results: List of (unsuccessful) generation results for these actions.
             past_val: List of validation results for the results.
 
         Returns:
-            The next action component.
+            The next action component and context to be used for the next generation attempt.
         """
         ...
 
@@ -170,10 +151,14 @@ class BaseSamplingStrategy(SamplingStrategy):
         self,
         action: Component,
         context: Context,
+        backend: Backend,
         requirements: list[Requirement],
         *,
-        show_progress: bool = True,
         validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        show_progress: bool = True,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -190,19 +175,14 @@ class BaseSamplingStrategy(SamplingStrategy):
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
         """
-        assert self.validate is not None, "Validation must be provided."
-        assert self.generate is not None, "Generate must be provided."
-
-        # just to be sure to not cause issues to the OG context
-        ctx = context.copy()
         validation_ctx = validation_ctx if validation_ctx is not None else context
-        assert validation_ctx is not None, "Validation context must be provided."
 
         flog = FancyLogger.get_logger()
 
         sampled_results: list[ModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
+        sample_contexts: list[Context] = []
 
         # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
         # flag to determine whether we should show the pbar.
@@ -224,22 +204,32 @@ class BaseSamplingStrategy(SamplingStrategy):
             else range(self.loop_budget)  # type: ignore
         )
 
-        new_action = deepcopy(action)
+        next_action = deepcopy(action)
+        next_context = context
         for _ in loop_budget_range_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result = self.generate(new_action, ctx)
+            result, result_ctx = backend.generate_from_context(
+                next_action,
+                ctx=next_context,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
             await result.avalue()
 
             # validation pass
-            val_scores_co = self.validate(
-                reqs,
-                validation_ctx,
-                result,
-                input=None,  # type: ignore
+            val_scores_co = mfuncs._validate(
+                reqs=reqs,
+                context=result_ctx,
+                backend=backend,
+                output=result,
+                format=format,
+                model_options=model_options,
+                # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
             )
             val_scores = await val_scores_co
 
@@ -249,7 +239,8 @@ class BaseSamplingStrategy(SamplingStrategy):
             # collect all data
             sampled_results.append(result)
             sampled_scores.append(constraint_scores)
-            sampled_actions.append(new_action)
+            sampled_actions.append(next_action)
+            sample_contexts.append(result_ctx)
 
             # if all vals are true -- break and return success
             if all(bool(s[1]) for s in constraint_scores):
@@ -259,11 +250,15 @@ class BaseSamplingStrategy(SamplingStrategy):
                 )  # Cannot be None after generation.
                 result._generate_log.is_final_result = True
 
+                # SUCCESS !!!!
                 return SamplingResult(
-                    result,
+                    result=result,
+                    result_ctx=result_ctx,
                     success=True,
                     sample_generations=sampled_results,
                     sample_validations=sampled_scores,
+                    sample_contexts=sample_contexts,
+                    sample_actions=sampled_actions,
                 )
 
             else:
@@ -272,8 +267,12 @@ class BaseSamplingStrategy(SamplingStrategy):
                 flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
 
             # If we did not pass all constraints, update the instruction and try again.
-            new_action = self.repair(
-                ctx, sampled_actions, sampled_results, sampled_scores
+            next_action, next_context = self.repair(
+                next_context,
+                result_ctx,
+                sampled_actions,
+                sampled_results,
+                sampled_scores,
             )
 
         flog.info(
@@ -294,11 +293,13 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
 
         return SamplingResult(
-            sampled_results[best_failed_index],
+            result=sampled_results[best_failed_index],
+            result_ctx=sample_contexts[best_failed_index],
             success=False,
             sample_generations=sampled_results,
             sample_validations=sampled_scores,
             sample_actions=sampled_actions,
+            sample_contexts=sample_contexts,
         )
 
 
@@ -316,13 +317,14 @@ class RejectionSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        old_ctx: Context,
+        new_ctx: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> tuple[Component, Context]:
         # repeat the last action again.
-        return past_actions[-1]
+        return past_actions[-1], old_ctx
 
 
 class RepairTemplateStrategy(BaseSamplingStrategy):
@@ -339,11 +341,12 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        old_ctx: Context,
+        new_ctx: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> tuple[Component, Context]:
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
             last_failed_reqs: list[Requirement] = [
@@ -354,8 +357,8 @@ class RepairTemplateStrategy(BaseSamplingStrategy):
             )
             return pa.copy_and_repair(
                 repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
-            )
-        return past_actions[-1]
+            ), old_ctx
+        return pa, old_ctx
 
 
 class MultiTurnStrategy(BaseSamplingStrategy):
@@ -372,17 +375,15 @@ class MultiTurnStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        old_ctx: Context,
+        new_ctx: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
-        assert isinstance(ctx, LinearContext), (
-            " Need linear context to run agentic sampling."
+    ) -> tuple[Component, Context]:
+        assert isinstance(new_ctx, ChatContext), (
+            " Need chat context to run agentic sampling."
         )
-
-        # add failed execution to chat history
-        ctx.insert_turn(ContextTurn(past_actions[-1], past_results[-1]))
 
         last_failed_reqs: list[Requirement] = [s[0] for s in past_val[-1] if not s[1]]
         last_failed_reqs_str = "* " + "\n* ".join(
@@ -395,7 +396,7 @@ class MultiTurnStrategy(BaseSamplingStrategy):
             content=f"The following requirements have not been met: \n{last_failed_reqs_str}\n Please try again to fulfill the requirements.",
         )
 
-        return next_action
+        return next_action, new_ctx
 
 
 class BestofNSamplingStrategy(BaseSamplingStrategy):
@@ -407,10 +408,14 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         self,
         action: Component,
         context: Context,
+        backend: Backend,
         requirements: list[Requirement],
         *,
-        show_progress: bool = True,
         validation_ctx: Context | None = None,
+        format: type[BaseModelSubclass] | None = None,
+        model_options: dict | None = None,
+        tool_calls: bool = False,
+        show_progress: bool = True,
     ) -> SamplingResult:
         """This method performs a sampling operation based on the given instruction.
 
@@ -427,11 +432,6 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         Raises:
             AssertionError: Asserts that all required components (repair, select_from_failure, validate, and generate) are provided before proceeding with the sampling.
         """
-        assert self.validate is not None, "Validation must be provided."
-        assert self.generate is not None, "Generate must be provided."
-
-        # just to be sure to not cause issues to the OG context
-        ctx = context.copy()
         validation_ctx = validation_ctx if validation_ctx is not None else context
         assert validation_ctx is not None, "Validation context must be provided."
 
@@ -440,12 +440,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         sampled_results: list[ModelOutputThunk] = []
         sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         sampled_actions: list[Component] = []
+        sample_contexts: list[Context] = []
 
         successful_sampled_results: list[ModelOutputThunk] = []
         successful_sampled_scores: list[list[tuple[Requirement, ValidationResult]]] = []
         successful_sampled_actions: list[Component] = []
-
-        # sampled_val_scores: list[float] = []
+        successful_sample_contexts: list[Context] = []
 
         # The `logging_redirect_tqdm` approach did not work, so instead we will use the show_progress
         # flag to determine whether we should show the pbar.
@@ -471,29 +471,54 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
         )
 
         loop_count = 0
-        loop_budget_range_iterator = (
+        generate_loop_budget_iterator = (
+            tqdm.tqdm(range(self.loop_budget))  # type: ignore
+            if show_progress
+            else range(self.loop_budget)  # type: ignore
+        )
+        validate_loop_budget_iterator = (
             tqdm.tqdm(range(self.loop_budget))  # type: ignore
             if show_progress
             else range(self.loop_budget)  # type: ignore
         )
 
-        new_action = deepcopy(action)
-        for _ in loop_budget_range_iterator:  # type: ignore
+        next_action = deepcopy(action)
+        next_context = context
+        flog.info("BestofNSampling Generating Loop:")
+        for _ in generate_loop_budget_iterator:  # type: ignore
             loop_count += 1
             if not show_progress:
                 flog.info(f"Running loop {loop_count} of {self.loop_budget}")
 
             # run a generation pass
-            result = self.generate(new_action, ctx)
-            await result.avalue()
+            result, result_ctx = backend.generate_from_context(
+                next_action,
+                ctx=next_context,
+                format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
+            sampled_results.append(result)
+            sampled_actions.append(next_action)
+            sample_contexts.append(result_ctx)
 
-            # validation pass
-            # action has user turn
-            val_scores_co = self.validate(
-                reqs,
-                validation_ctx,
-                result,
-                input=action._description,  # type: ignore
+        await wait_for_all_mots(sampled_results)
+
+        flog.info("BestofNSampling Validation Loop:")
+        for i in validate_loop_budget_iterator:
+            result_ctx = sample_contexts[i]
+            result = sampled_results[i]
+            next_action = sampled_actions[i]
+
+            val_scores_co = mfuncs._validate(
+                reqs=reqs,
+                context=result_ctx,
+                backend=backend,
+                output=result,
+                format=format,
+                model_options=model_options,
+                input=next_action._description,  # type: ignore
+                # tool_calls=tool_calls  # Don't support using tool calls in validation strategies.
             )
             val_scores = await val_scores_co
 
@@ -501,9 +526,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             constraint_scores = list(zip(reqs, val_scores))
 
             # collect all data
-            sampled_results.append(result)
             sampled_scores.append(constraint_scores)
-            sampled_actions.append(new_action)
 
             # check if requirements pass else repair and re-sample
             # if all vals are true, save it and continue to get next sample
@@ -516,7 +539,8 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
                 successful_sampled_results.append(result)
                 successful_sampled_scores.append(constraint_scores)
-                successful_sampled_actions.append(new_action)
+                successful_sampled_actions.append(next_action)
+                successful_sample_contexts.append(result_ctx)
 
             else:
                 # log partial success and continue
@@ -524,8 +548,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 flog.info(f"FAILED. Valid: {count_valid}/{len(constraint_scores)}")
 
                 # If we did not pass all constraints, update the instruction and try again.
-                new_action = self.repair(
-                    ctx, sampled_actions, sampled_results, sampled_scores
+                next_action, next_context = self.repair(
+                    next_context,
+                    result_ctx,
+                    sampled_actions,
+                    sampled_results,
+                    sampled_scores,
                 )
 
         # find max reward amongst results for which all requirements have passed
@@ -544,22 +572,26 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             assert scorer_preference_ordering is not None
 
             if scorer_preference_ordering == "max":
-                best_result, best_score = max(
-                    zip(successful_sampled_results, scores), key=lambda x: x[1]
+                best_result, best_score, best_context = max(
+                    zip(successful_sampled_results, scores, successful_sample_contexts),
+                    key=lambda x: x[1],
                 )
             elif scorer_preference_ordering == "min":
-                best_result, best_score = min(
-                    zip(successful_sampled_results, scores), key=lambda x: x[1]
+                best_result, best_score, best_context = min(
+                    zip(successful_sampled_results, scores, successful_sample_contexts),
+                    key=lambda x: x[1],
                 )
             else:
                 raise NotImplementedError
 
             return SamplingResult(
                 best_result,
+                result_ctx=best_context,
                 success=True,
                 sample_generations=sampled_results,
                 sample_validations=sampled_scores,
                 sample_actions=sampled_actions,
+                sample_contexts=sample_contexts,
             )
 
         # if all failures, call select from failure
@@ -577,10 +609,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             )
             return SamplingResult(
                 sampled_results[best_failed_index],
+                result_ctx=sample_contexts[best_failed_index],
                 success=False,
                 sample_generations=sampled_results,
                 sample_validations=sampled_scores,
                 sample_actions=sampled_actions,
+                sample_contexts=sample_contexts,
             )
 
     @staticmethod
@@ -605,11 +639,12 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
 
     @staticmethod
     def repair(
-        ctx: Context,
+        old_ctx: Context,
+        new_ctx: Context,
         past_actions: list[Component],
         past_results: list[ModelOutputThunk],
         past_val: list[list[tuple[Requirement, ValidationResult]]],
-    ) -> Component:
+    ) -> tuple[Component, Context]:
         pa = past_actions[-1]
         if isinstance(pa, Instruction):
             last_failed_reqs: list[Requirement] = [
@@ -620,5 +655,5 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             )
             return pa.copy_and_repair(
                 repair_string=f"The following requirements failed before:\n{last_failed_reqs_str}"
-            )
-        return past_actions[-1]
+            ), old_ctx
+        return past_actions[-1], old_ctx
