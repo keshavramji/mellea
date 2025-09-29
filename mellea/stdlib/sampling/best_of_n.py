@@ -197,9 +197,10 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
             else:
                 raise NotImplementedError
 
+            best_index = sampled_results.index(best_result)
+
             return SamplingResult(
-                best_result,
-                result_ctx=best_context,
+                result_index=best_index,
                 success=True,
                 sample_generations=sampled_results,
                 sample_validations=sampled_scores,
@@ -221,8 +222,7 @@ class BestofNSamplingStrategy(BaseSamplingStrategy):
                 "The select_from_failure method did not return a valid result. It has to selected from failed_results."
             )
             return SamplingResult(
-                sampled_results[best_failed_index],
-                result_ctx=sample_contexts[best_failed_index],
+                result_index=best_failed_index,
                 success=False,
                 sample_generations=sampled_results,
                 sample_validations=sampled_scores,

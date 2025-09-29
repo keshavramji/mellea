@@ -186,8 +186,7 @@ class BaseSamplingStrategy(SamplingStrategy):
 
                 # SUCCESS !!!!
                 return SamplingResult(
-                    result=result,
-                    result_ctx=result_ctx,
+                    result_index=len(sampled_results) - 1,
                     success=True,
                     sample_generations=sampled_results,
                     sample_validations=sampled_scores,
@@ -227,8 +226,7 @@ class BaseSamplingStrategy(SamplingStrategy):
         sampled_results[best_failed_index]._generate_log.is_final_result = True  # type: ignore
 
         return SamplingResult(
-            result=sampled_results[best_failed_index],
-            result_ctx=sample_contexts[best_failed_index],
+            result_index=best_failed_index,
             success=False,
             sample_generations=sampled_results,
             sample_validations=sampled_scores,

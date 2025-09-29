@@ -10,8 +10,7 @@ class SamplingResult(CBlock):
 
     def __init__(
         self,
-        result: ModelOutputThunk,
-        result_ctx: Context,
+        result_index: int,
         success: bool,
         *,
         sample_generations: list[ModelOutputThunk] | None = None,
@@ -28,14 +27,45 @@ class SamplingResult(CBlock):
             sample_generations: A list containing intermediate generations produced during the process.
             sample_validations: For each generation a list of tuples of a requirement and a validation result.
         """
-        super().__init__(value=result.value)
-        self.result = result
-        self.result_ctx = result_ctx
+        if sample_generations is None:
+            sample_generations = []
+        if sample_validations is None:
+            sample_validations = []
+        if sample_actions is None:
+            sample_actions = []
+        if sample_contexts is None:
+            sample_contexts = []
+
+        assert result_index is not None
+        assert (
+            0 <= result_index < len(sample_generations)
+            or -len(sample_generations) <= result_index < 0
+        ), " result index cannot be out of range"
+
+        super().__init__(value=sample_generations[result_index].value)
+
+        self.result_index = result_index
         self.success = success
         self.sample_generations = sample_generations
         self.sample_validations = sample_validations
         self.sample_actions = sample_actions
         self.sample_contexts = sample_contexts
+
+    @property
+    def result(self) -> ModelOutputThunk:
+        return self.sample_generations[self.result_index]
+
+    @property
+    def result_ctx(self) -> Context:
+        return self.sample_contexts[self.result_index]
+
+    @property
+    def result_action(self) -> Component:
+        return self.sample_actions[self.result_index]
+
+    @property
+    def result_validations(self) -> list[tuple[Requirement, ValidationResult]]:
+        return self.sample_validations[self.result_index]
 
 
 class SamplingStrategy(abc.ABC):
