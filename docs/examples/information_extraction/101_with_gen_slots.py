@@ -3,12 +3,14 @@
 from mellea import generative, start_session
 from mellea.backends import model_ids
 
-m = start_session(model_id=model_ids.MISTRALAI_MISTRAL_0_3_7B)
+m = start_session()
 
 
 @generative
 def extract_all_person_names(doc: str) -> list[str]:
-    """Given a document, extract all person names. Return these names as list of strings."""
+    """
+    Given a document, extract names of ALL mentioned persons. Return these names as list of strings.
+    """
 
 
 # ref: https://www.nytimes.com/2012/05/20/world/world-leaders-at-us-meeting-urge-growth-not-austerity.html
