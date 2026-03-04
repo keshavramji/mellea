@@ -10,7 +10,7 @@ from mellea.backends import ModelOption
 from mellea.backends.backend import Backend
 from mellea.core import ModelOutputThunk
 from mellea.stdlib.components import SimpleComponent
-from mellea.stdlib.components.unit_test_eval import TestBasedEval
+from mellea.stdlib.components.unit_test_eval import AgenticTestBasedEval, TestBasedEval
 
 console = Console()
 
@@ -353,3 +353,136 @@ def summary_stats(results: list[TestEvalResult]):
             console.print(
                 f"{result.test_eval.name}:\n\t{result.passed_count}/{result.total_count} ({result.pass_rate * 100:.1f}%)\n\n"
             )
+
+
+def execute_agentic_test_eval(
+    test_eval: AgenticTestBasedEval, judge_session: mellea.MelleaSession
+) -> TestEvalResult:
+    """Execute an agentic test evaluation using pre-computed generations (offline)."""
+    input_results = []
+
+    for idx, input_text in enumerate(test_eval.inputs):
+        model_output = (
+            test_eval.generations[idx] if idx < len(test_eval.generations) else ""
+        )
+
+        targets_for_input = (
+            test_eval.targets[idx] if idx < len(test_eval.targets) else []
+        )
+
+        test_eval.set_judge_context(
+            input_text=input_text,
+            prediction=model_output,
+            targets_for_input=targets_for_input,
+        )
+        judge_output_thunk = judge_session.act(test_eval)
+        judge_output = str(judge_output_thunk)
+        score, justification = parse_judge_output(judge_output)
+        passed = score == 1 if score is not None else False
+
+        input_result = InputEvalResult(
+            input_text=input_text,
+            model_output=model_output,
+            validation_passed=passed,
+            score=score if score is not None else 0,
+            validation_reason=justification,
+        )
+        input_results.append(input_result)
+        judge_session.reset()
+
+        if test_eval.early_stop and not passed:
+            console.print(
+                f"[yellow]Early stop: turn {idx + 1} failed for {test_eval.name}[/yellow]"
+            )
+            break
+
+    return TestEvalResult(test_eval=test_eval, input_results=input_results)
+
+
+def find_agentic_test_pairs(test_dir: str) -> list[tuple[str, str]]:
+    """Find (test_file, generations_file) pairs in a directory.
+
+    Looks for *_mellea.json files paired with sim_*.json files in the same subdirectory.
+    """
+    test_dir_path = Path(test_dir)
+    pairs = []
+
+    for mellea_file in sorted(test_dir_path.rglob("*_mellea.json")):
+        parent = mellea_file.parent
+        sim_files = sorted(parent.glob("sim_*.json"))
+        if sim_files:
+            pairs.append((str(mellea_file), str(sim_files[0])))
+        else:
+            console.print(
+                f"[yellow]No sim file found for {mellea_file}, skipping[/yellow]"
+            )
+
+    return pairs
+
+
+def run_agentic_evaluations(
+    test_dir: str,
+    judge_backend: str,
+    judge_model: str | None,
+    max_judge_tokens: int | None,
+    output_path: str,
+    output_format: str,
+    early_stop: bool,
+    continue_on_error: bool,
+):
+    """Run agentic (offline, multi-turn) evaluations."""
+    pairs = find_agentic_test_pairs(test_dir)
+    if not pairs:
+        console.print("[red]No test/generation file pairs found[/red]")
+        return
+
+    all_test_evals: list[AgenticTestBasedEval] = []
+    for test_file, gen_file in pairs:
+        try:
+            evals = AgenticTestBasedEval.from_agentic_json(
+                test_file, gen_file, early_stop=early_stop
+            )
+            all_test_evals.extend(evals)
+            console.print(f"Loaded {len(evals)} agentic test(s) from {test_file}")
+        except Exception as e:
+            console.print(f"[red]Error loading {test_file}: {e}[/red]")
+            if not continue_on_error:
+                raise
+
+    if not all_test_evals:
+        console.print("[red]Failed to load any agentic test evaluations[/red]")
+        return
+
+    console.print(f"Total agentic tests: {len(all_test_evals)}")
+    total_turns = sum(len(t.inputs) for t in all_test_evals)
+    console.print(f"Total turns to judge: {total_turns}")
+    console.print(f"Judge model: {judge_model}")
+
+    judge_session = create_session(
+        backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens
+    )
+
+    all_results = []
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Running agentic evals", total=len(all_test_evals))
+        for test_eval in all_test_evals:
+            try:
+                result = execute_agentic_test_eval(
+                    test_eval=test_eval, judge_session=judge_session
+                )
+                all_results.append(result)
+            except Exception as e:
+                console.print(f"[red]Error on test {test_eval.test_id}: {e}[/red]")
+                if not continue_on_error:
+                    raise
+            progress.advance(task)
+
+    summary_stats(all_results)
+    save_results(all_results, output_path, output_format)
+    judge_session.cleanup()

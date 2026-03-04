@@ -48,3 +48,44 @@ def eval_run(
 
 
 eval_app.command("run")(eval_run)
+
+
+def eval_agentic_run(
+    test_dir: str = typer.Argument(
+        ..., help="Directory containing unit test and generation file pairs"
+    ),
+    judge_backend: str = typer.Option(
+        "ollama", "--judge-backend", "-jb", help="Judge backend"
+    ),
+    judge_model: str = typer.Option(None, "--judge-model", help="Judge model name"),
+    max_judge_tokens: int = typer.Option(
+        256, "--max-judge-tokens", help="Max tokens for the judge model's judgement"
+    ),
+    output_path: str = typer.Option(
+        "agentic_eval_results", "--output-path", "-o", help="Output path for results"
+    ),
+    output_format: str = typer.Option(
+        "json", "--output-format", help="Either json or jsonl format for results"
+    ),
+    early_stop: bool = typer.Option(
+        False, "--early-stop", help="Stop evaluating a test on first failed turn"
+    ),
+    continue_on_error: bool = typer.Option(
+        True, "--continue-on-error", help="Continue to next unit test after exception"
+    ),
+):
+    from cli.eval.runner import run_agentic_evaluations
+
+    run_agentic_evaluations(
+        test_dir=test_dir,
+        judge_backend=judge_backend,
+        judge_model=judge_model,
+        max_judge_tokens=max_judge_tokens,
+        output_path=output_path,
+        output_format=output_format,
+        early_stop=early_stop,
+        continue_on_error=continue_on_error,
+    )
+
+
+eval_app.command("agentic")(eval_agentic_run)
