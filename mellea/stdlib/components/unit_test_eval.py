@@ -261,53 +261,101 @@ class AgenticTestBasedEval(TestBasedEval):
             except Exception as e:
                 raise ValueError(f"Invalid test data in {test_filepath}: {e}")
 
-            for example in test_data.examples:
-                inputs = []
-                targets = []
-                input_ids = []
+            # Check if this is multi-turn (any example has >1 user turn)
+            is_multi_turn = any(
+                sum(1 for m in ex.input if m.role == "user") > 1
+                for ex in test_data.examples
+            )
 
-                # Extract all user turns as inputs, assistant turns as intermediate targets
-                turns = example.input
-                user_turn_count = 0
-                for i, msg in enumerate(turns):
-                    if msg.role == "user":
-                        inputs.append(msg.content)
-                        user_turn_count += 1
-                        # find the next assistant turn as intermediate target
-                        intermediate_target = []
-                        for j in range(i + 1, len(turns)):
-                            if turns[j].role == "assistant":
-                                intermediate_target.append(turns[j].content)
-                                break
-                            elif turns[j].role == "user":
-                                break
-                        targets.append(intermediate_target)
-                        input_ids.append(f"{example.input_id}.turn_{user_turn_count}")
+            if is_multi_turn:
+                # Each example is its own test with multiple turns
+                for example in test_data.examples:
+                    inputs, targets, input_ids = cls._parse_multi_turn_example(example)
 
-                # Replace the last target with the targets section
-                if inputs and example.targets:
-                    final_targets = [
+                    generations = extract_generations_from_trajectory(
+                        generations_filepath, len(inputs)
+                    )
+
+                    test_evals.append(
+                        cls(
+                            source=test_data.source,
+                            name=test_data.name,
+                            instructions=test_data.instructions,
+                            inputs=inputs,
+                            targets=targets,
+                            test_id=test_data.id,
+                            input_ids=input_ids,
+                            generations=generations,
+                            early_stop=early_stop,
+                        )
+                    )
+            else:
+                # Single-turn examples: group all into one test (like from_json_file)
+                all_inputs = []
+                all_targets = []
+                all_input_ids = []
+
+                for example in test_data.examples:
+                    user_messages = [msg for msg in example.input if msg.role == "user"]
+                    if user_messages:
+                        all_inputs.append(user_messages[-1].content)
+
+                    targets_for_input = [
                         msg.content
                         for msg in example.targets
                         if msg.role == "assistant"
                     ]
-                    targets[-1] = final_targets
+                    all_targets.append(targets_for_input)
+                    all_input_ids.append(example.input_id)
 
                 generations = extract_generations_from_trajectory(
-                    generations_filepath, len(inputs)
+                    generations_filepath, len(all_inputs)
                 )
 
-                test_eval = cls(
-                    source=test_data.source,
-                    name=test_data.name,
-                    instructions=test_data.instructions,
-                    inputs=inputs,
-                    targets=targets,
-                    test_id=test_data.id,
-                    input_ids=input_ids,
-                    generations=generations,
-                    early_stop=early_stop,
+                test_evals.append(
+                    cls(
+                        source=test_data.source,
+                        name=test_data.name,
+                        instructions=test_data.instructions,
+                        inputs=all_inputs,
+                        targets=all_targets,
+                        test_id=test_data.id,
+                        input_ids=all_input_ids,
+                        generations=generations,
+                        early_stop=early_stop,
+                    )
                 )
-                test_evals.append(test_eval)
 
         return test_evals
+
+    @classmethod
+    def _parse_multi_turn_example(cls, example: "Example"):
+        """Parse a single multi-turn example into inputs, targets, and input_ids."""
+        inputs = []
+        targets = []
+        input_ids = []
+
+        turns = example.input
+        user_turn_count = 0
+        for i, msg in enumerate(turns):
+            if msg.role == "user":
+                inputs.append(msg.content)
+                user_turn_count += 1
+                intermediate_target = []
+                for j in range(i + 1, len(turns)):
+                    if turns[j].role == "assistant":
+                        intermediate_target.append(turns[j].content)
+                        break
+                    elif turns[j].role == "user":
+                        break
+                targets.append(intermediate_target)
+                input_ids.append(f"{example.input_id}.turn_{user_turn_count}")
+
+        # Replace the last target with the targets section
+        if inputs and example.targets:
+            final_targets = [
+                msg.content for msg in example.targets if msg.role == "assistant"
+            ]
+            targets[-1] = final_targets
+
+        return inputs, targets, input_ids
