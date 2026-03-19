@@ -1,0 +1,35 @@
+{
+  "source": "demo",
+  "name": "basic_qa_test",
+  "instructions": "The response should be accurate and concise.",
+  "id": "test_001",
+  "examples": [
+    {
+      "input": [
+        {"role": "user", "content": "What is the capital of France?"}
+      ],
+      "targets": [
+        {"role": "assistant", "content": "Paris"}
+      ],
+      "input_id": "q1"
+    },
+    {
+      "input": [
+        {"role": "user", "content": "What is 2 + 2?"}
+      ],
+      "targets": [
+        {"role": "assistant", "content": "4"}
+      ],
+      "input_id": "q2"
+    },
+    {
+      "input": [
+        {"role": "user", "content": "What color is the sky?"}
+      ],
+      "targets": [
+        {"role": "assistant", "content": "Blue"}
+      ],
+      "input_id": "q3"
+    }
+  ]
+}

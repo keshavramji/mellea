@@ -132,10 +132,6 @@ class BYOGeneratorSession(MelleaSession):
         self.ctx = self.ctx.add(thunk)
         return thunk
 
-    # ---------------------------------------------------------------
-    #  Override act/aact to support dual-backend (gen + judge)
-    # ---------------------------------------------------------------
-
     @overload
     def act(
         self,
@@ -173,7 +169,7 @@ class BYOGeneratorSession(MelleaSession):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[S] | SamplingResult:
-        """Run an action using the BYO generator, with optional dual-backend sampling.
+        """Run an action using the BYO generator.
 
         If a sampling strategy is provided with requirements that need LLM-as-a-Judge,
         the judge_backend is used for validation while the callable backend handles
@@ -185,7 +181,6 @@ class BYOGeneratorSession(MelleaSession):
             for r in requirements  # type: ignore
         )
 
-        # Simple case: no strategy or no LLMaJ requirements -- delegate to parent
         if strategy is None or not has_llmaj_reqs:
             return super().act(  # type: ignore[call-overload]
                 action,
@@ -197,7 +192,6 @@ class BYOGeneratorSession(MelleaSession):
                 tool_calls=tool_calls,
             )
 
-        # Dual-backend case: strategy + LLMaJ requirements
         if self.judge_backend is None:
             raise RuntimeError(
                 "A judge_backend is required when using a sampling strategy with "
@@ -264,7 +258,7 @@ class BYOGeneratorSession(MelleaSession):
         model_options: dict | None = None,
         tool_calls: bool = False,
     ) -> ModelOutputThunk[S] | SamplingResult:
-        """Async version of .act with dual-backend support."""
+        """Async version of .act."""
         has_reqs = requirements is not None and len(requirements) > 0
         has_llmaj_reqs = has_reqs and any(
             r.validation_fn is None
@@ -317,7 +311,7 @@ class BYOGeneratorSession(MelleaSession):
     ) -> SamplingResult[S]:
         """Run a sampling loop using callable backend for gen, judge backend for validation.
 
-        Mirrors the logic in BaseSamplingStrategy.sample() but splits
+        Same logic as BaseSamplingStrategy.sample()  but splits
         generation and validation across two backends.
         """
         assert self.judge_backend is not None
@@ -342,7 +336,7 @@ class BYOGeneratorSession(MelleaSession):
         for loop_count in range(loop_budget):
             flog.info(f"BYO sampling loop {loop_count + 1} of {loop_budget}")
 
-            # Generation via callable backend
+            # generation via callable backend
             result, result_ctx = await self.backend.generate_from_context(
                 next_action,
                 ctx=next_context,
@@ -352,10 +346,10 @@ class BYOGeneratorSession(MelleaSession):
             )
             await result.avalue()
 
-            # Re-parse with original action's parser
+            # re-parse with original action's parser
             result.parsed_repr = action.parse(result)
 
-            # Validation via judge backend
+            # validation using judge backend
             val_scores = await mfuncs.avalidate(
                 reqs=reqs,
                 context=result_ctx,
@@ -391,7 +385,7 @@ class BYOGeneratorSession(MelleaSession):
                 f"BYO sampling: FAILED. Valid: {len(constraint_scores) - len(failed)}/{len(constraint_scores)}"
             )
 
-            # Attempt repair if the strategy supports it
+            # attempt repair if the strategy supports it
             if hasattr(strategy, "repair"):
                 next_action, next_context = strategy.repair(
                     next_context,
@@ -423,10 +417,6 @@ class BYOGeneratorSession(MelleaSession):
             sample_actions=sampled_actions,
             sample_contexts=sample_contexts,
         )
-
-    # ---------------------------------------------------------------
-    #  Override validate/avalidate to use judge_backend
-    # ---------------------------------------------------------------
 
     def validate(
         self,
@@ -495,12 +485,8 @@ class BYOGeneratorSession(MelleaSession):
             return self.judge_backend
 
         # All requirements use validation_fn; backend won't actually be called
-        # for generation, but is required by the function signature.
+        # for generation, but it's required by the function signature.
         return self.backend
-
-    # ---------------------------------------------------------------
-    #  Convenience
-    # ---------------------------------------------------------------
 
     def cleanup(self) -> None:
         """Clean up session resources."""

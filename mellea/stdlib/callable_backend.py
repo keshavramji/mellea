@@ -14,13 +14,13 @@ from ..core.backend import Backend, BaseModelSubclass, C
 GeneratorFn = Callable[[Component | CBlock, Context], str | Awaitable[str]]
 """Type alias for a BYO generator function.
 
-The function receives the action (Component or CBlock) and the current Context,
+The function receives the action (Component / CBlock) and the current Context,
 and returns a string (sync or async) representing the generated output.
 """
 
 
 class CallableBackend(Backend):
-    """A Backend that delegates generation to a user-provided callable.
+    """A Backend for delegating generation to a user-provided callable.
 
     This backend wraps a function with the signature:
 
@@ -28,7 +28,7 @@ class CallableBackend(Backend):
 
     and adapts it to the Mellea Backend interface. This allows external
     generation systems (agentic frameworks, API wrappers, etc.) to be used
-    within Mellea's evaluation pipeline while preserving all Mellea primitives.
+    while preserving core Mellea primitives.
     """
 
     def __init__(self, generate_fn: GeneratorFn):
