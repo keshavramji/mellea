@@ -172,9 +172,11 @@ def run_evaluations(
     test_files: list[str],
     backend: str,
     model: str | None,
+    base_url: str | None,
     max_gen_tokens: int | None,
     judge_backend: str | None,
     judge_model: str | None,
+    judge_base_url: str | None,
     max_judge_tokens: int | None,
     output_path: str,
     output_format: str,
@@ -210,12 +212,13 @@ def run_evaluations(
     console.print(f"Generation model: {model}")
     console.print(f"Judge model: {judge_model}")
 
-    m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
+    m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens, base_url=base_url)
     # Use same backend as generator if judge_backend not specified
     judge_session = create_session(
         backend=judge_backend if judge_backend else backend,
         model=judge_model,
         max_tokens=max_judge_tokens,
+        base_url=judge_base_url if judge_base_url else base_url,
     )
 
     all_results = []
