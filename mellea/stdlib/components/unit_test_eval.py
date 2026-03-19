@@ -222,6 +222,7 @@ class AgenticTestBasedEval(TestBasedEval):
         input_ids: list[str] | None = None,
         generations: list[str] | None = None,
         early_stop: bool = False,
+        is_multi_turn: bool = False,
     ):
         """Initialize an agentic test with pre-computed generations."""
         super().__init__(
@@ -235,6 +236,18 @@ class AgenticTestBasedEval(TestBasedEval):
         )
         self.generations = generations or []
         self.early_stop = early_stop
+        self.is_multi_turn = is_multi_turn
+
+    def set_judge_context(
+        self,
+        input_text: str,
+        prediction: str,
+        targets_for_input: list[str],
+        conversation_history: list[dict] | None = None,
+    ):
+        """Set context for judge evaluation, including prior conversation history."""
+        super().set_judge_context(input_text, prediction, targets_for_input)
+        self._judge_context["conversation_history"] = conversation_history or []
 
     @classmethod
     def from_agentic_json(
@@ -287,6 +300,7 @@ class AgenticTestBasedEval(TestBasedEval):
                             input_ids=input_ids,
                             generations=generations,
                             early_stop=early_stop,
+                            is_multi_turn=True,
                         )
                     )
             else:
@@ -339,7 +353,6 @@ class AgenticTestBasedEval(TestBasedEval):
         user_turn_count = 0
         for i, msg in enumerate(turns):
             if msg.role == "user":
-                inputs.append(msg.content)
                 user_turn_count += 1
                 intermediate_target = []
                 for j in range(i + 1, len(turns)):
@@ -348,6 +361,18 @@ class AgenticTestBasedEval(TestBasedEval):
                         break
                     elif turns[j].role == "user":
                         break
+
+                if inputs:
+                    prior_context = "\n\n".join(
+                        f"USER: {q}\nASSISTANT: {t[0]}"
+                        for q, t in zip(inputs, targets)
+                        if t
+                    )
+                    input_text = prior_context + f"\n\nUSER: {msg.content}"
+                else:
+                    input_text = msg.content
+
+                inputs.append(input_text)
                 targets.append(intermediate_target)
                 input_ids.append(f"{example.input_id}.turn_{user_turn_count}")
 

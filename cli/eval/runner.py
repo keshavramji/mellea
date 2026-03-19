@@ -370,8 +370,14 @@ def summary_stats(results: list[TestEvalResult]):
 def execute_agentic_test_eval(
     test_eval: AgenticTestBasedEval, judge_session: mellea.MelleaSession
 ) -> TestEvalResult:
-    """Execute an agentic test evaluation using pre-computed generations (offline)."""
+    """Execute an agentic test evaluation using pre-computed generations (offline).
+
+    Evaluates each turn in sequence. On pass, the user turn and model output are
+    appended to the conversation history for the next turn's judge context. If
+    early_stop is set and a turn fails, evaluation stops immediately.
+    """
     input_results = []
+    conversation_history: list[dict] = []
 
     for idx, input_text in enumerate(test_eval.inputs):
         model_output = (
@@ -386,6 +392,7 @@ def execute_agentic_test_eval(
             input_text=input_text,
             prediction=model_output,
             targets_for_input=targets_for_input,
+            conversation_history=conversation_history,
         )
         judge_output_thunk = judge_session.act(test_eval)
         judge_output = str(judge_output_thunk)
@@ -402,11 +409,27 @@ def execute_agentic_test_eval(
         input_results.append(input_result)
         judge_session.reset()
 
-        if test_eval.early_stop and not passed:
+        if passed and test_eval.is_multi_turn:
+            gold_response = targets_for_input[0] if targets_for_input else model_output
+            conversation_history.append({"role": "user", "content": input_text})
+            conversation_history.append({"role": "assistant", "content": gold_response})
+        elif not passed and test_eval.early_stop and test_eval.is_multi_turn:
             console.print(
                 f"[yellow]Early stop: turn {idx + 1} failed for {test_eval.name}[/yellow]"
             )
             break
+
+    # Pad skipped turns (due to early stop) as failed so they count in totals
+    for skipped_idx in range(len(input_results), len(test_eval.inputs)):
+        input_results.append(
+            InputEvalResult(
+                input_text=test_eval.inputs[skipped_idx],
+                model_output="",
+                validation_passed=False,
+                score=0,
+                validation_reason="Skipped due to early stop on a prior turn.",
+            )
+        )
 
     return TestEvalResult(test_eval=test_eval, input_results=input_results)
 

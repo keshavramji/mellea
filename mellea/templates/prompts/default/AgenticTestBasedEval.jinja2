@@ -1,3 +1,11 @@
+{% if conversation_history %}
+**Conversation History**
+
+{% for turn in conversation_history %}
+**{{ turn.role | capitalize }}**: {{ turn.content }}
+{% endfor %}
+
+{% endif %}
 **Input to the model**
 
 {{ input }}
