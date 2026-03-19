@@ -424,15 +424,21 @@ def execute_agentic_test_eval(
         input_results.append(input_result)
         judge_session.reset()
 
-        if passed and test_eval.is_multi_turn:
-            gold_response = targets_for_input[0] if targets_for_input else model_output
-            conversation_history.append({"role": "user", "content": input_text})
-            conversation_history.append({"role": "assistant", "content": gold_response})
-        elif not passed and test_eval.early_stop and test_eval.is_multi_turn:
-            console.print(
-                f"[yellow]Early stop: turn {idx + 1} failed for {test_eval.name}[/yellow]"
-            )
-            break
+        if test_eval.is_multi_turn:
+            if test_eval.early_stop:
+                # use model-generated response
+                if not passed:
+                    console.print(
+                        f"[yellow]Early stop: turn {idx + 1} failed for {test_eval.name}[/yellow]"
+                    )
+                    break
+                conversation_history.append({"role": "user", "content": input_text})
+                conversation_history.append({"role": "assistant", "content": model_output})
+            else:
+                # append gold repsonse
+                gold_response = targets_for_input[0] if targets_for_input else model_output
+                conversation_history.append({"role": "user", "content": input_text})
+                conversation_history.append({"role": "assistant", "content": gold_response})
 
     # Pad skipped turns (due to early stop) as failed so they count in totals
     for skipped_idx in range(len(input_results), len(test_eval.inputs)):
@@ -511,7 +517,10 @@ def run_agentic_evaluations(
     console.print(f"Judge model: {judge_model}")
 
     judge_session = create_session(
-        backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens, base_url=judge_base_url
+        backend=judge_backend,
+        model=judge_model,
+        max_tokens=max_judge_tokens,
+        base_url=judge_base_url,
     )
 
     all_results = []
