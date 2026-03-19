@@ -339,20 +339,32 @@ def save_results(results: list[TestEvalResult], output_path: str, output_format:
 
 
 def summary_stats(results: list[TestEvalResult]):
+    total_tests = len(results)
+    tests_fully_passed = sum(1 for r in results if r.passed_count == r.total_count)
+    test_pass_rate = tests_fully_passed / total_tests if total_tests > 0 else 0.0
+
     total_inputs = sum(r.total_count for r in results)
     passed_inputs = sum(r.passed_count for r in results)
     overall_pass_rate = passed_inputs / total_inputs if total_inputs > 0 else 0.0
 
+    console.print(f"\nTotal Unit Tests: {total_tests}")
+    console.print(
+        f"Unit Test Pass Rate: {tests_fully_passed}/{total_tests} ({test_pass_rate * 100:.1f}%)"
+    )
+    console.print()
     console.print(f"Total number of inputs across tests: {total_inputs}")
     console.print(f"Number of inputs passed across tests: {passed_inputs}")
     console.print(f"Cumulative Pass Rate: {overall_pass_rate * 100:.1f}%")
+    console.print()
 
     if len(results) > 1:
         console.print("Per-Test Breakdown:")
         for result in results:
+            ut_score = "1/1" if result.passed_count == result.total_count else "0/1"
             console.print(
-                f"{result.test_eval.name}:\n\t{result.passed_count}/{result.total_count} ({result.pass_rate * 100:.1f}%)\n\n"
+                f"\t{result.test_eval.name}: {ut_score} ({result.passed_count}/{result.total_count})"
             )
+        console.print("\n\n")
 
 
 def execute_agentic_test_eval(
@@ -399,6 +411,7 @@ def execute_agentic_test_eval(
     return TestEvalResult(test_eval=test_eval, input_results=input_results)
 
 
+### NOTE: PATH PREFIX/SUFFIX HARDCODED, MAKE MORE GENERAL
 def find_agentic_test_pairs(test_dir: str) -> list[tuple[str, str]]:
     """Find (test_file, generations_file) pairs in a directory.
 
