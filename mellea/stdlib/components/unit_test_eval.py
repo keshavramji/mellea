@@ -9,6 +9,66 @@ from pydantic import BaseModel, Field, field_validator
 from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
+def extract_generations_from_trajectory(
+    trajectory_path: str, num_turns: int
+) -> list[str]:
+    """Extract pre-computed generations from a trajectory file.
+
+    Skips the first user turn (setup). For each subsequent user turn, the generation
+    is the assistant turn immediately before the next user turn. For the last turn,
+    it's the last assistant turn in the conversation. Empty string if none found.
+    """
+    path = Path(trajectory_path)
+    with path.open("r") as f:
+        data = json.load(f)
+
+    conversation = data["conversation"]
+    user_indices = [
+        i for i, turn in enumerate(conversation) if turn.get("role") == "user"
+    ]
+    # skip setup turn
+    task_user_indices = user_indices[1:]
+
+    if len(task_user_indices) < num_turns:
+        raise ValueError(
+            f"Trajectory has {len(task_user_indices)} task user turns, "
+            f"expected {num_turns}."
+        )
+
+    generations: list[str] = []
+    for turn_idx in range(num_turns):
+        if turn_idx < num_turns - 1:
+            next_user_pos = task_user_indices[turn_idx + 1]
+            prev_turn = conversation[next_user_pos - 1]
+            if prev_turn.get("role") == "assistant":
+                generations.append(_extract_content(prev_turn))
+            else:
+                generations.append("")
+        else:
+            # last turn: only use if conversation ends with an assistant turn
+            last_turn = conversation[-1]
+            if last_turn.get("role") == "assistant":
+                generations.append(_extract_content(last_turn))
+            else:
+                generations.append("")
+
+    return generations
+
+
+def _extract_content(turn: dict) -> str:
+    """Extract text content from a conversation turn."""
+    content = turn.get("content", "")
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(item["text"])
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    return str(content)
+
+
 class Message(BaseModel):
     """Schema for a message in the test data."""
 
@@ -144,5 +204,110 @@ class TestBasedEval(Component[str]):
                 input_ids=input_ids,
             )
             test_evals.append(test_eval)
+
+        return test_evals
+
+
+class AgenticTestBasedEval(TestBasedEval):
+    """Multi-turn unit test with pre-computed generations (offline mode)."""
+
+    def __init__(
+        self,
+        source: str,
+        name: str,
+        instructions: str,
+        inputs: list[str],
+        targets: list[list[str]] | None = None,
+        test_id: str | None = None,
+        input_ids: list[str] | None = None,
+        generations: list[str] | None = None,
+        early_stop: bool = False,
+    ):
+        """Initialize an agentic test with pre-computed generations."""
+        super().__init__(
+            source=source,
+            name=name,
+            instructions=instructions,
+            inputs=inputs,
+            targets=targets,
+            test_id=test_id,
+            input_ids=input_ids,
+        )
+        self.generations = generations or []
+        self.early_stop = early_stop
+
+    @classmethod
+    def from_agentic_json(
+        cls, test_filepath: str, generations_filepath: str, early_stop: bool = False
+    ) -> list["AgenticTestBasedEval"]:
+        """Load agentic test evals from a unit test file and a trajectory file.
+
+        The test file defines multi-turn inputs/targets. The trajectory file provides
+        pre-computed generations. Intermediate assistant turns in the input section
+        serve as targets for earlier user turns; the targets section provides the
+        target for the final user turn.
+        """
+        path = Path(test_filepath)
+        with path.open("r") as f:
+            data = json.load(f)
+
+        if not isinstance(data, list):
+            data = [data]
+
+        test_evals = []
+        for test_data_dict in data:
+            try:
+                test_data = TestData(**test_data_dict)
+            except Exception as e:
+                raise ValueError(f"Invalid test data in {test_filepath}: {e}")
+
+            for example in test_data.examples:
+                inputs = []
+                targets = []
+                input_ids = []
+
+                # Extract all user turns as inputs, assistant turns as intermediate targets
+                turns = example.input
+                user_turn_count = 0
+                for i, msg in enumerate(turns):
+                    if msg.role == "user":
+                        inputs.append(msg.content)
+                        user_turn_count += 1
+                        # find the next assistant turn as intermediate target
+                        intermediate_target = []
+                        for j in range(i + 1, len(turns)):
+                            if turns[j].role == "assistant":
+                                intermediate_target.append(turns[j].content)
+                                break
+                            elif turns[j].role == "user":
+                                break
+                        targets.append(intermediate_target)
+                        input_ids.append(f"{example.input_id}.turn_{user_turn_count}")
+
+                # Replace the last target with the targets section
+                if inputs and example.targets:
+                    final_targets = [
+                        msg.content
+                        for msg in example.targets
+                        if msg.role == "assistant"
+                    ]
+                    targets[-1] = final_targets
+
+                generations = extract_generations_from_trajectory(
+                    generations_filepath, len(inputs)
+                )
+
+                test_eval = cls(
+                    source=test_data.source,
+                    name=test_data.name,
+                    instructions=test_data.instructions,
+                    inputs=inputs,
+                    targets=targets,
+                    test_id=test_data.id,
+                    input_ids=input_ids,
+                    generations=generations,
+                    early_stop=early_stop,
+                )
+                test_evals.append(test_eval)
 
         return test_evals
