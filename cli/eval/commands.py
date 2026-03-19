@@ -58,6 +58,7 @@ def eval_agentic_run(
         "ollama", "--judge-backend", "-jb", help="Judge backend"
     ),
     judge_model: str = typer.Option(None, "--judge-model", help="Judge model name"),
+    judge_base_url: str = typer.Option(None, "--judge-base-url", help="Base URL for judge backend (e.g. for vllm-server)"),
     max_judge_tokens: int = typer.Option(
         256, "--max-judge-tokens", help="Max tokens for the judge model's judgement"
     ),
@@ -80,6 +81,7 @@ def eval_agentic_run(
         test_dir=test_dir,
         judge_backend=judge_backend,
         judge_model=judge_model,
+        judge_base_url=judge_base_url,
         max_judge_tokens=max_judge_tokens,
         output_path=output_path,
         output_format=output_format,

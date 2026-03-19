@@ -76,7 +76,7 @@ class TestEvalResult:
 
 
 def create_session(
-    backend: str, model: str | None, max_tokens: int | None
+    backend: str, model: str | None, max_tokens: int | None, base_url: str | None = None
 ) -> mellea.MelleaSession:
     """Create a mellea session with the specified backend and model."""
     model_id = None
@@ -95,6 +95,11 @@ def create_session(
         backend_lower = backend.lower()
         backend_instance: Backend
 
+        api_key = None
+        if backend_lower == "vllm-server":
+            backend_lower = "openai"
+            api_key = "EMPTY"
+
         if backend_lower == "ollama":
             from mellea.backends.ollama import OllamaModelBackend
 
@@ -108,6 +113,8 @@ def create_session(
 
             backend_instance = OpenAIBackend(
                 model_id=model_id,
+                base_url=base_url,
+                api_key=api_key,
                 model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
@@ -135,9 +142,17 @@ def create_session(
                 model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
             )
 
+        elif backend_lower == "vllm":
+            from mellea.backends.vllm import LocalVLLMBackend
+
+            backend_instance = LocalVLLMBackend(
+                model_id=model_id,
+                model_options={ModelOption.MAX_NEW_TOKENS: max_tokens},
+            )
+
         else:
             raise ValueError(
-                f"Unknown backend: {backend}. Supported: ollama, openai, hf, watsonx, litellm"
+                f"Unknown backend: {backend}. Supported: ollama, openai, hf, watsonx, litellm, vllm, vllm-server"
             )
 
         # create session with backend instance
@@ -460,6 +475,7 @@ def run_agentic_evaluations(
     test_dir: str,
     judge_backend: str,
     judge_model: str | None,
+    judge_base_url: str | None,
     max_judge_tokens: int | None,
     output_path: str,
     output_format: str,
@@ -495,7 +511,7 @@ def run_agentic_evaluations(
     console.print(f"Judge model: {judge_model}")
 
     judge_session = create_session(
-        backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens
+        backend=judge_backend, model=judge_model, max_tokens=max_judge_tokens, base_url=judge_base_url
     )
 
     all_results = []
