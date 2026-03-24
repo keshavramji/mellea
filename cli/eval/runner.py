@@ -247,7 +247,7 @@ def run_evaluations(
             progress.advance(task)
 
     summary_stats(all_results)
-    save_results(all_results, output_path, output_format)
+    save_results(all_results, output_path, output_format, judge_model)
 
     m.cleanup()
     judge_session.cleanup()
@@ -304,16 +304,25 @@ def execute_test_eval(
 
 
 def parse_judge_output(judge_output: str):
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"```(?:json)?\s*", "", judge_output).strip()
+
+    # Try parsing the entire output as JSON first
     try:
-        json_match = re.search(r'\{[^}]*"score"[^}]*\}', judge_output, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            data = json.loads(json_str)
-            score = data.get("score")
-            justification = data.get("justification")
-            return score, justification
+        data = json.loads(cleaned)
+        return data.get("score"), data.get("justification")
     except (json.JSONDecodeError, AttributeError):
         pass
+
+    # Find the last JSON object in the output (models sometimes output reasoning before the JSON)
+    for match in reversed(list(re.finditer(r'\{', cleaned))):
+        candidate = cleaned[match.start():]
+        try:
+            data = json.loads(candidate)
+            if "score" in data:
+                return data.get("score"), data.get("justification")
+        except (json.JSONDecodeError, ValueError):
+            continue
 
     # if the above fails, search the text for the score
     score_match = re.search(r'score["\s:]+(\d+)', judge_output, re.IGNORECASE)
@@ -324,7 +333,7 @@ def parse_judge_output(judge_output: str):
     return None, judge_output
 
 
-def save_results(results: list[TestEvalResult], output_path: str, output_format: str):
+def save_results(results: list[TestEvalResult], output_path: str, output_format: str, judge_model: str | None = None):
     output_path_obj = Path(output_path)
     if output_path_obj.suffix != f".{output_format}":
         output_path_obj = Path(f"{output_path}.{output_format}")
@@ -344,6 +353,7 @@ def save_results(results: list[TestEvalResult], output_path: str, output_format:
             "passed_inputs": passed_inputs,
             "failed_inputs": total_inputs - passed_inputs,
             "overall_pass_rate": overall_pass_rate,
+            "judge_model": judge_model,
         }
 
         with output_path_obj.open("w") as f:
@@ -396,6 +406,7 @@ def execute_agentic_test_eval(
     """
     input_results = []
     conversation_history: list[dict] = []
+    final_idx = len(test_eval.inputs) - 1
 
     for idx, input_text in enumerate(test_eval.inputs):
         model_output = (
@@ -405,6 +416,8 @@ def execute_agentic_test_eval(
         targets_for_input = (
             test_eval.targets[idx] if idx < len(test_eval.targets) else []
         )
+
+        is_final_turn = idx == final_idx
 
         test_eval.set_judge_context(
             input_text=input_text,
@@ -427,21 +440,21 @@ def execute_agentic_test_eval(
         input_results.append(input_result)
         judge_session.reset()
 
-        if test_eval.is_multi_turn:
+        if test_eval.is_multi_turn and not is_final_turn:
             if test_eval.early_stop:
-                # use model-generated response
+                # early stop: use gold response as context, but stop the chain if model fails
+                gold_response = targets_for_input[0] if targets_for_input else model_output
+                conversation_history.append({"role": "user", "content": input_text})
+                conversation_history.append({"role": "assistant", "content": gold_response})
                 if not passed:
                     console.print(
                         f"[yellow]Early stop: turn {idx + 1} failed for {test_eval.name}[/yellow]"
                     )
                     break
+            else:
+                # no early stop: append model's actual response regardless of correctness
                 conversation_history.append({"role": "user", "content": input_text})
                 conversation_history.append({"role": "assistant", "content": model_output})
-            else:
-                # append gold repsonse
-                gold_response = targets_for_input[0] if targets_for_input else model_output
-                conversation_history.append({"role": "user", "content": input_text})
-                conversation_history.append({"role": "assistant", "content": gold_response})
 
     # Pad skipped turns (due to early stop) as failed so they count in totals
     for skipped_idx in range(len(input_results), len(test_eval.inputs)):
@@ -548,5 +561,5 @@ def run_agentic_evaluations(
             progress.advance(task)
 
     summary_stats(all_results)
-    save_results(all_results, output_path, output_format)
+    save_results(all_results, output_path, output_format, judge_model)
     judge_session.cleanup()

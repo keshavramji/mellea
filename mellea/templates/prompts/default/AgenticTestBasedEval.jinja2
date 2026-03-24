@@ -29,11 +29,11 @@ The model output should adhere to the following guidelines:
 {{ guidelines }}
 
 **Scoring Criteria**
-* Score 0: The model output is empty, incomplete, or violates any of the guidelines.
+* Score 0: The model output is empty (no output produced), incomplete, or violates any of the guidelines.
 * Score 1: The model output is well aligned with the ground truth{% if target and target != "N/A" %} - if it exists{% endif %}, the input to the model, and adheres to all guidelines.
 
 **Return Your Rating**
-Return your rating in the following format:
-{"score": your_score, "justification": "your_justification"}
+Return your rating as a JSON object. The justification must be a non-empty string explaining your reasoning.
+{"score": your_score, "justification": "explain why the output received this score, referencing specific aspects of the model output"}
 
 Your rating:
