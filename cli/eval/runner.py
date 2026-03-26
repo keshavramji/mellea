@@ -313,8 +313,7 @@ def parse_judge_output(judge_output: str):
         return data.get("score"), data.get("justification")
     except (json.JSONDecodeError, AttributeError):
         pass
-
-    # Find the last JSON object in the output (models sometimes output reasoning before the JSON)
+    
     for match in reversed(list(re.finditer(r'\{', cleaned))):
         candidate = cleaned[match.start():]
         try:
@@ -442,26 +441,31 @@ def execute_agentic_test_eval(
 
         if test_eval.is_multi_turn and not is_final_turn:
             if test_eval.early_stop:
-                # early stop: use gold response as context, but stop the chain if model fails
-                gold_response = targets_for_input[0] if targets_for_input else model_output
+                # early stop: use model's response as context, stop if model fails
                 conversation_history.append({"role": "user", "content": input_text})
-                conversation_history.append({"role": "assistant", "content": gold_response})
+                conversation_history.append({"role": "assistant", "content": model_output})
                 if not passed:
                     console.print(
                         f"[yellow]Early stop: turn {idx + 1} failed for {test_eval.name}[/yellow]"
                     )
                     break
             else:
-                # no early stop: append model's actual response regardless of correctness
+                # no early stop: use gold response as context
+                gold_response = (targets_for_input[0] if targets_for_input else model_output)
                 conversation_history.append({"role": "user", "content": input_text})
-                conversation_history.append({"role": "assistant", "content": model_output})
+                conversation_history.append({"role": "assistant", "content": gold_response})
 
     # Pad skipped turns (due to early stop) as failed so they count in totals
     for skipped_idx in range(len(input_results), len(test_eval.inputs)):
+        skipped_output = (
+            test_eval.generations[skipped_idx]
+            if skipped_idx < len(test_eval.generations)
+            else ""
+        )
         input_results.append(
             InputEvalResult(
                 input_text=test_eval.inputs[skipped_idx],
-                model_output="",
+                model_output=skipped_output,
                 validation_passed=False,
                 score=0,
                 validation_reason="Skipped due to early stop on a prior turn.",

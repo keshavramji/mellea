@@ -314,13 +314,13 @@ class AgenticTestBasedEval(TestBasedEval):
                     if user_messages:
                         all_inputs.append(user_messages[-1].content)
 
-                    targets_for_input = [
-                        msg.content
-                        for msg in example.targets
-                        if msg.role == "assistant"
-                    ]
-                    all_targets.append(targets_for_input)
-                    all_input_ids.append(example.input_id)
+                        targets_for_input = [
+                            msg.content
+                            for msg in example.targets
+                            if msg.role == "assistant"
+                        ]
+                        all_targets.append(targets_for_input)
+                        all_input_ids.append(example.input_id)
 
                 generations = extract_generations_from_trajectory(
                     generations_filepath, len(all_inputs)
@@ -362,17 +362,7 @@ class AgenticTestBasedEval(TestBasedEval):
                     elif turns[j].role == "user":
                         break
 
-                if inputs:
-                    prior_context = "\n\n".join(
-                        f"USER: {q}\nASSISTANT: {t[0]}"
-                        for q, t in zip(inputs, targets)
-                        if t
-                    )
-                    input_text = prior_context + f"\n\nUSER: {msg.content}"
-                else:
-                    input_text = msg.content
-
-                inputs.append(input_text)
+                inputs.append(msg.content)
                 targets.append(intermediate_target)
                 input_ids.append(f"{example.input_id}.turn_{user_turn_count}")
 
