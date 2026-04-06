@@ -6,7 +6,7 @@
 {% endfor %}
 
 {% endif %}
-**Input to the model**
+**Last User Turn**
 
 {{ input }}
 
@@ -25,7 +25,7 @@
 {% endif %}
 
 **Rating Guidelines**
-Please evaluate the model output only with respect to how it addresses the **Input to the model** above. The conversation history is provided for context, and may be helpful in your assessment.
+Please evaluate the model output only with respect to how it addresses the **Last User Turn** above. The conversation history is provided for context, and may be helpful in your assessment.
 The guidelines below are intended to be used for the entire conversation, though some guidelines may only be relevant to certain turns. Identify which guidelines are relevant to the current question, and do not penalize the model output for guidelines that are irrelevant.
 The model output should adhere to the following guidelines:
 {{ guidelines }}
