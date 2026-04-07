@@ -366,26 +366,29 @@ def save_results(results: list[TestEvalResult], output_path: str, output_format:
 
 
 def summary_stats(results: list[TestEvalResult]):
-    # Group results by test_id so multi-example unit tests are shown together
-    from collections import defaultdict, OrderedDict
+    from collections import OrderedDict
+
+    # Group by file_id (falls back to test_id for non-agentic evals)
     grouped: dict[str, list[TestEvalResult]] = OrderedDict()
     for r in results:
-        grouped.setdefault(r.test_eval.test_id, []).append(r)
+        group_key = getattr(r.test_eval, "file_id", None) or r.test_eval.test_id
+        grouped.setdefault(group_key, []).append(r)
 
     total_unit_tests = len(grouped)
     unit_tests_fully_passed = 0
-    total_turns = 0
-    total_turns_passed = 0
+    total_examples = len(results)
+    examples_passed = sum(1 for r in results if r.passed_count == r.total_count)
+    total_turns = sum(r.total_count for r in results)
+    total_turns_passed = sum(r.passed_count for r in results)
 
     for test_results in grouped.values():
         turns_passed = sum(r.passed_count for r in test_results)
         turns_total = sum(r.total_count for r in test_results)
-        total_turns += turns_total
-        total_turns_passed += turns_passed
         if turns_passed == turns_total:
             unit_tests_fully_passed += 1
 
     ut_pass_rate = unit_tests_fully_passed / total_unit_tests if total_unit_tests > 0 else 0.0
+    ex_pass_rate = examples_passed / total_examples if total_examples > 0 else 0.0
     turn_pass_rate = total_turns_passed / total_turns if total_turns > 0 else 0.0
 
     console.print(f"\nTotal Unit Tests: {total_unit_tests}")
@@ -393,21 +396,27 @@ def summary_stats(results: list[TestEvalResult]):
         f"Unit Test Pass Rate: {unit_tests_fully_passed}/{total_unit_tests} ({ut_pass_rate * 100:.1f}%)"
     )
     console.print()
+    console.print(f"Total Examples: {total_examples}")
+    console.print(
+        f"Example-level Pass Rate: {examples_passed}/{total_examples} ({ex_pass_rate * 100:.1f}%)"
+    )
+    console.print()
     console.print(f"Total turns across all tests: {total_turns}")
     console.print(f"Turns passed: {total_turns_passed}")
     console.print(f"Cumulative Turn Pass Rate: {turn_pass_rate * 100:.1f}%")
     console.print()
 
-    if total_unit_tests > 1:
+    if total_unit_tests > 0:
         console.print("Per-Test Breakdown:")
-        for test_id, test_results in grouped.items():
+        for group_key, test_results in grouped.items():
             name = test_results[0].test_eval.name
-            examples_passed = sum(1 for r in test_results if r.passed_count == r.total_count)
-            total_examples = len(test_results)
+            ex_passed = sum(1 for r in test_results if r.passed_count == r.total_count)
+            ex_total = len(test_results)
             turns_passed = sum(r.passed_count for r in test_results)
             turns_total = sum(r.total_count for r in test_results)
+            ut_passed = 1 if ex_passed == ex_total else 0
             console.print(
-                f"\t{name}: {examples_passed}/{total_examples} ({turns_passed}/{turns_total})"
+                f"\t{name}: {ut_passed}/1 ({ex_passed}/{ex_total} examples, {turns_passed}/{turns_total} turns)"
             )
         console.print("\n\n")
 
@@ -539,7 +548,10 @@ def run_agentic_evaluations(
                 test_file, gen_file, early_stop=early_stop
             )
             all_test_evals.extend(evals)
-            console.print(f"Loaded {len(evals)} agentic test(s) from {test_file}")
+            num_unit_tests = len({getattr(e, "file_id", None) or e.test_id for e in evals})
+            console.print(
+                f"Loaded {num_unit_tests} unit test(s) / {len(evals)} example(s) from {test_file}"
+            )
         except Exception as e:
             console.print(f"[red]Error loading {test_file}: {e}[/red]")
             if not continue_on_error:
@@ -549,9 +561,10 @@ def run_agentic_evaluations(
         console.print("[red]Failed to load any agentic test evaluations[/red]")
         return
 
-    console.print(f"Total agentic tests: {len(all_test_evals)}")
+    total_unit_tests = len({getattr(e, "file_id", None) or e.test_id for e in all_test_evals})
+    total_examples = len(all_test_evals)
     total_turns = sum(len(t.inputs) for t in all_test_evals)
-    console.print(f"Total turns to judge: {total_turns}")
+    console.print(f"Total unit tests: {total_unit_tests} ({total_examples} examples, {total_turns} turns to judge)")
     console.print(f"Judge model: {judge_model}")
 
     judge_session = create_session(

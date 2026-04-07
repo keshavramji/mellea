@@ -247,6 +247,7 @@ class AgenticTestBasedEval(TestBasedEval):
         generations: list[str] | None = None,
         early_stop: bool = False,
         is_multi_turn: bool = False,
+        file_id: str | None = None,
     ):
         """Initialize an agentic test with pre-computed generations."""
         super().__init__(
@@ -261,6 +262,7 @@ class AgenticTestBasedEval(TestBasedEval):
         self.generations = generations or []
         self.early_stop = early_stop
         self.is_multi_turn = is_multi_turn
+        self.file_id = file_id or test_id
 
     def set_judge_context(
         self,
@@ -284,6 +286,7 @@ class AgenticTestBasedEval(TestBasedEval):
         serve as targets for earlier user turns; the targets section provides the
         target for the final user turn.
         """
+        file_id = Path(test_filepath).stem
         path = Path(test_filepath)
         with path.open("r") as f:
             data = json.load(f)
@@ -344,6 +347,7 @@ class AgenticTestBasedEval(TestBasedEval):
                             generations=generations,
                             early_stop=early_stop,
                             is_multi_turn=is_multi_turn,
+                            file_id=file_id,
                         )
                     )
             else:
@@ -381,6 +385,7 @@ class AgenticTestBasedEval(TestBasedEval):
                         input_ids=all_input_ids,
                         generations=generations,
                         early_stop=early_stop,
+                        file_id=file_id,
                     )
                 )
 
