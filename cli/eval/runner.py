@@ -366,30 +366,48 @@ def save_results(results: list[TestEvalResult], output_path: str, output_format:
 
 
 def summary_stats(results: list[TestEvalResult]):
-    total_tests = len(results)
-    tests_fully_passed = sum(1 for r in results if r.passed_count == r.total_count)
-    test_pass_rate = tests_fully_passed / total_tests if total_tests > 0 else 0.0
+    # Group results by test_id so multi-example unit tests are shown together
+    from collections import defaultdict, OrderedDict
+    grouped: dict[str, list[TestEvalResult]] = OrderedDict()
+    for r in results:
+        grouped.setdefault(r.test_eval.test_id, []).append(r)
 
-    total_inputs = sum(r.total_count for r in results)
-    passed_inputs = sum(r.passed_count for r in results)
-    overall_pass_rate = passed_inputs / total_inputs if total_inputs > 0 else 0.0
+    total_unit_tests = len(grouped)
+    unit_tests_fully_passed = 0
+    total_turns = 0
+    total_turns_passed = 0
 
-    console.print(f"\nTotal Unit Tests: {total_tests}")
+    for test_results in grouped.values():
+        turns_passed = sum(r.passed_count for r in test_results)
+        turns_total = sum(r.total_count for r in test_results)
+        total_turns += turns_total
+        total_turns_passed += turns_passed
+        if turns_passed == turns_total:
+            unit_tests_fully_passed += 1
+
+    ut_pass_rate = unit_tests_fully_passed / total_unit_tests if total_unit_tests > 0 else 0.0
+    turn_pass_rate = total_turns_passed / total_turns if total_turns > 0 else 0.0
+
+    console.print(f"\nTotal Unit Tests: {total_unit_tests}")
     console.print(
-        f"Unit Test Pass Rate: {tests_fully_passed}/{total_tests} ({test_pass_rate * 100:.1f}%)"
+        f"Unit Test Pass Rate: {unit_tests_fully_passed}/{total_unit_tests} ({ut_pass_rate * 100:.1f}%)"
     )
     console.print()
-    console.print(f"Total number of inputs across tests: {total_inputs}")
-    console.print(f"Number of inputs passed across tests: {passed_inputs}")
-    console.print(f"Cumulative Pass Rate: {overall_pass_rate * 100:.1f}%")
+    console.print(f"Total turns across all tests: {total_turns}")
+    console.print(f"Turns passed: {total_turns_passed}")
+    console.print(f"Cumulative Turn Pass Rate: {turn_pass_rate * 100:.1f}%")
     console.print()
 
-    if len(results) > 1:
+    if total_unit_tests > 1:
         console.print("Per-Test Breakdown:")
-        for result in results:
-            ut_score = "1/1" if result.passed_count == result.total_count else "0/1"
+        for test_id, test_results in grouped.items():
+            name = test_results[0].test_eval.name
+            examples_passed = sum(1 for r in test_results if r.passed_count == r.total_count)
+            total_examples = len(test_results)
+            turns_passed = sum(r.passed_count for r in test_results)
+            turns_total = sum(r.total_count for r in test_results)
             console.print(
-                f"\t{result.test_eval.name}: {ut_score} ({result.passed_count}/{result.total_count})"
+                f"\t{name}: {examples_passed}/{total_examples} ({turns_passed}/{turns_total})"
             )
         console.print("\n\n")
 

@@ -9,25 +9,22 @@ from pydantic import BaseModel, Field, field_validator
 from ...core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
 
 
-def extract_generations_from_trajectory(
-    trajectory_path: str, num_turns: int
+def _extract_generations_from_conversation(
+    conversation: list[dict], num_turns: int, has_setup_prompt: bool = True
 ) -> list[str]:
-    """Extract pre-computed generations from a trajectory file.
+    """Extract generations from a single conversation.
 
-    Skips the first user turn (setup). For each subsequent user turn, the generation
-    is the assistant turn immediately before the next user turn. For the last turn,
-    it's the last assistant turn in the conversation. Empty string if none found.
+    If ``has_setup_prompt`` is True (default), the first user turn is the setup
+    turn and is skipped. If False (system-prompt examples where setup is skipped),
+    all user turns are task turns.
+    For each task user turn, the generation is the assistant turn immediately
+    before the next user turn. For the last turn it's the last assistant turn.
+    Empty string if none found.
     """
-    path = Path(trajectory_path)
-    with path.open("r") as f:
-        data = json.load(f)
-
-    conversation = data["conversation"]
     user_indices = [
         i for i, turn in enumerate(conversation) if turn.get("role") == "user"
     ]
-    # skip setup turn
-    task_user_indices = user_indices[1:]
+    task_user_indices = user_indices[1:] if has_setup_prompt else user_indices
 
     if len(task_user_indices) < num_turns:
         raise ValueError(
@@ -53,6 +50,33 @@ def extract_generations_from_trajectory(
                 generations.append("")
 
     return generations
+
+
+def extract_generations_from_trajectory(
+    trajectory_path: str, num_turns: int, example_idx: int = 0
+) -> list[str]:
+    """Extract pre-computed generations from a trajectory file.
+    Supports both ``conversations``: a list of per-example
+    conversations, and the singular ``conversation``: a single flat
+    conversation.  
+    """
+    path = Path(trajectory_path)
+    with path.open("r") as f:
+        data = json.load(f)
+
+    if "conversations" in data:
+        conversations = data["conversations"]
+        if example_idx >= len(conversations):
+            raise ValueError(
+                f"example_idx {example_idx} is out of range; "
+                f"trajectory has {len(conversations)} conversation(s)."
+            )
+        conversation = conversations[example_idx]
+    else:
+        conversation = data["conversation"]
+
+    has_setup_prompt = data.get("has_setup_prompt", True)
+    return _extract_generations_from_conversation(conversation, num_turns, has_setup_prompt)
 
 
 def _extract_content(turn: dict) -> str:
@@ -267,7 +291,13 @@ class AgenticTestBasedEval(TestBasedEval):
         if not isinstance(data, list):
             data = [data]
 
+        # Detect format once outside the loop
+        with Path(generations_filepath).open("r") as gf:
+            gen_data = json.load(gf)
+        has_per_example_conversations = "conversations" in gen_data
+
         test_evals = []
+        global_example_idx = 0  # tracks absolute example index across all test entries
         for test_data_dict in data:
             try:
                 test_data = TestData(**test_data_dict)
@@ -280,14 +310,27 @@ class AgenticTestBasedEval(TestBasedEval):
                 for ex in test_data.examples
             )
 
-            if is_multi_turn:
-                # Each example is its own test with multiple turns
+            if is_multi_turn or has_per_example_conversations:
+                # Each example is its own isolated test
                 for example in test_data.examples:
-                    inputs, targets, input_ids = cls._parse_multi_turn_example(example)
+                    if is_multi_turn:
+                        inputs, targets, input_ids = cls._parse_multi_turn_example(example)
+                    else:
+                        user_messages = [msg for msg in example.input if msg.role == "user"]
+                        inputs = [user_messages[-1].content] if user_messages else []
+                        targets = [
+                            [msg.content for msg in example.targets if msg.role == "assistant"]
+                        ]
+                        input_ids = [example.input_id]
+
+                    if not inputs:
+                        global_example_idx += 1
+                        continue
 
                     generations = extract_generations_from_trajectory(
-                        generations_filepath, len(inputs)
+                        generations_filepath, len(inputs), example_idx=global_example_idx
                     )
+                    global_example_idx += 1
 
                     test_evals.append(
                         cls(
@@ -300,16 +343,17 @@ class AgenticTestBasedEval(TestBasedEval):
                             input_ids=input_ids,
                             generations=generations,
                             early_stop=early_stop,
-                            is_multi_turn=True,
+                            is_multi_turn=is_multi_turn,
                         )
                     )
             else:
-                # Single-turn examples: group all into one test (like from_json_file)
+                # Legacy single-turn: group all examples into one test
                 all_inputs = []
                 all_targets = []
                 all_input_ids = []
 
                 for example in test_data.examples:
+                    global_example_idx += 1
                     user_messages = [msg for msg in example.input if msg.role == "user"]
                     if user_messages:
                         all_inputs.append(user_messages[-1].content)
