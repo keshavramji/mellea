@@ -1,17 +1,19 @@
 """Execution engine for the test-based LLM evaluation pipeline.
 
-Loads JSON test files into `TestBasedEval` objects and, for each test, runs a
-generator model to produce responses and a separate judge model to score them. Parses
-the judge output for a `{"score": ..., "justification": ...}` JSON fragment,
-aggregates per-input pass/fail counts, and saves the full results to JSON or JSONL.
+Loads JSON test files into `TestBasedEval` objects and runs them through pytest:
+each test becomes one parametrized pytest case that generates responses with a
+generator model, scores them with a separate judge model, and asserts the
+aggregate pass rate against a threshold. The judge output is parsed for a
+`{"score": ..., "justification": ...}` JSON fragment, per-input pass/fail counts
+are aggregated, and the full results are saved to JSON or JSONL.
 """
 
 import json
 import re
 from pathlib import Path
 
+import pytest
 from rich.console import Console
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 import mellea
 from mellea.backends import ModelOption
@@ -21,6 +23,39 @@ from mellea.stdlib.components import SimpleComponent
 from mellea.stdlib.components.unit_test_eval import TestBasedEval
 
 console = Console()
+
+# Three-way status codes returned by run_evaluations (and used as the process
+# exit code by `m eval run`).
+ALL_PASSED = 0  # every test met its threshold
+BELOW_THRESHOLD = 1  # tests ran, but at least one scored below threshold
+EVAL_ERROR = 2  # evaluation could not be run (raised / aborted / no tests)
+
+
+def classify_exit_code(pytest_exit: int, has_eval_errors: bool) -> int:
+    """Map a pytest exit code plus eval-error state to a three-way status code.
+
+    Precedence is error > below-threshold > pass: an unmeasurable test (#2)
+    outranks a measured-but-failing one (#1).
+
+    Args:
+        pytest_exit: The exit code returned by `pytest.main` (`0` all passed,
+            `1` tests failed, `2`-`5` interrupted/internal/usage/no-tests).
+        has_eval_errors: Whether any test raised while being evaluated (i.e. the
+            score could not be measured), as tracked by `EvalPlugin`.
+
+    Returns:
+        `ALL_PASSED`, `BELOW_THRESHOLD`, or `EVAL_ERROR`.
+    """
+    if has_eval_errors:
+        return EVAL_ERROR
+    if pytest_exit == 0:
+        return ALL_PASSED
+    if pytest_exit == 1:
+        # Failures with no eval errors are all below-threshold assertions.
+        return BELOW_THRESHOLD
+    # 2=interrupted, 3=internal error, 4=usage error, 5=no tests collected:
+    # the suite never produced a clean measurement.
+    return EVAL_ERROR
 
 
 class InputEvalResult:
@@ -225,8 +260,15 @@ def run_evaluations(
     output_path: str,
     output_format: str,
     continue_on_error: bool,
-):
-    """Run all unit-test evaluations against a generation model and a judge model.
+    pass_threshold: float = 1.0,
+) -> int:
+    """Run all unit-test evaluations through pytest against generation and judge models.
+
+    Loads every test file into `TestBasedEval` objects and hands them to pytest
+    via an `EvalPlugin`: each test becomes one parametrized pytest case that
+    generates responses, scores them with the judge, and asserts its aggregate
+    pass rate meets `pass_threshold`. pytest owns execution and reporting; the
+    plugin writes the custom JSON/JSONL results file when the session finishes.
 
     Args:
         test_files: List of paths to JSON test files. Each file should contain
@@ -243,9 +285,21 @@ def run_evaluations(
             backend default.
         output_path: File path prefix for saving results.
         output_format: Output format: `"json"` or `"jsonl"`.
-        continue_on_error: If `True`, skip failed test evaluations instead of
-            raising.
+        continue_on_error: If `True`, run every test; if `False`, abort on the
+            first failing or erroring test (pytest `-x`).
+        pass_threshold: Minimum aggregate pass rate (`0.0`-`1.0`) for a test to
+            count as passing.
+
+    Returns:
+        A three-way status code: `0` if every test met its threshold, `1` if
+        tests ran but at least one scored below threshold, and `2` if the
+        evaluation could not be run (no tests loaded, an evaluation raised, or
+        pytest aborted before producing results).
     """
+    # Imported here to avoid a circular import: pytest_plugin imports helpers
+    # from this module, which is fully loaded by the time this function runs.
+    from cli.eval.pytest_plugin import EvalPlugin
+
     all_test_evals: list[TestBasedEval] = []
 
     for test_file in test_files:
@@ -258,7 +312,7 @@ def run_evaluations(
 
     if not all_test_evals:
         console.print("Failed to load any test evaluations")
-        return
+        return EVAL_ERROR
 
     console.print(f"Total test evals to run: {len(all_test_evals)}")
     total_inputs = sum(len(test_eval.inputs) for test_eval in all_test_evals)
@@ -267,44 +321,32 @@ def run_evaluations(
     console.print(f"Generation model: {model}")
     console.print(f"Judge model: {judge_model}")
 
-    m = create_session(backend=backend, model=model, max_tokens=max_gen_tokens)
-    # Use same backend as generator if judge_backend not specified
-    judge_session = create_session(
-        backend=judge_backend if judge_backend else backend,
-        model=judge_model,
-        max_tokens=max_judge_tokens,
+    plugin = EvalPlugin(
+        test_evals=all_test_evals,
+        backend=backend,
+        model=model,
+        max_gen_tokens=max_gen_tokens,
+        judge_backend=judge_backend,
+        judge_model=judge_model,
+        max_judge_tokens=max_judge_tokens,
+        pass_threshold=pass_threshold,
+        output_path=output_path,
+        output_format=output_format,
     )
 
-    all_results = []
+    pytest_args = [
+        str(Path(__file__).parent / "_eval_module.py"),
+        "--no-cov",  # cancel the repo's --cov addopts for this run
+        "--timeout=0",  # disable the global suite timeout for long model runs
+        "-p",
+        "no:cacheprovider",  # don't write .pytest_cache
+        "-v",
+    ]
+    if not continue_on_error:
+        pytest_args.append("-x")  # abort on the first failing/erroring test
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Running evals", total=len(all_test_evals))
-        for test_eval in all_test_evals:
-            try:
-                result = execute_test_eval(
-                    test_eval=test_eval,
-                    generation_session=m,
-                    judge_session=judge_session,
-                )
-                all_results.append(result)
-            except Exception as e:
-                console.print(f"Error {e} on test {test_eval.test_id}")
-                if not continue_on_error:
-                    raise
-
-            progress.advance(task)
-
-    summary_stats(all_results)
-    save_results(all_results, output_path, output_format)
-
-    m.cleanup()
-    judge_session.cleanup()
+    exit_code = pytest.main(pytest_args, plugins=[plugin])
+    return classify_exit_code(int(exit_code), has_eval_errors=bool(plugin.error_tests))
 
 
 def execute_test_eval(

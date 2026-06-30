@@ -50,6 +50,11 @@ def eval_run(
         "--continue-on-error",
         help="Skip failed test cases instead of aborting the entire run",
     ),
+    pass_threshold: float = typer.Option(
+        1.0,
+        "--pass-threshold",
+        help="Minimum aggregate pass rate (0.0-1.0) for a test file to count as passing",
+    ),
 ):
     """Run LLM-as-a-judge evaluation on one or more test files.
 
@@ -65,7 +70,9 @@ def eval_run(
     Output:
         Writes evaluation results to `<output-path>.<output-format>` (default
         `eval_results.json`). The file contains per-test-case scores, judge
-        verdicts, and aggregate statistics.
+        verdicts, and aggregate statistics. Exits `0` if every test met its
+        threshold, `1` if tests ran but at least one scored below threshold, and
+        `2` if the evaluation could not be run (e.g. a backend error).
 
     Examples:
         m eval run tests.jsonl --backend ollama --model granite3.3:2b
@@ -84,11 +91,14 @@ def eval_run(
         max_judge_tokens: Maximum tokens for the judge model's output.
         output_path: File path prefix for the results file.
         output_format: Output format -- `"json"` or `"jsonl"`.
-        continue_on_error: If `True`, skip failed tests instead of raising.
+        continue_on_error: If `True`, run every test; if `False`, abort on the
+            first failing or erroring test.
+        pass_threshold: Minimum aggregate pass rate (`0.0`-`1.0`) for a test
+            file to count as passing.
     """
     from cli.eval.runner import run_evaluations
 
-    run_evaluations(
+    exit_code = run_evaluations(
         test_files=test_files,
         backend=backend,
         model=model,
@@ -99,7 +109,11 @@ def eval_run(
         output_path=output_path,
         output_format=output_format,
         continue_on_error=continue_on_error,
+        pass_threshold=pass_threshold,
     )
+    # Propagate the three-way status so `m eval run` can gate CI:
+    # 0 = all passed, 1 = below threshold, 2 = evaluation error.
+    raise typer.Exit(code=exit_code)
 
 
 eval_app.command("run")(eval_run)
